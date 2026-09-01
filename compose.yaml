@@ -14,7 +14,6 @@ services:
       PORT: 8088
       TELNET_PORT: 2323
       TRUST_PROXY: "1"
-      NODEHOUSE_DB_PATH: /app/data/nodehouse.db
       NODEHOUSE_ALLOWED_ORIGINS: https://bbs.packetloss404.com
       NODEHOUSE_PUBLIC_WEB_URL: https://bbs.packetloss404.com
       NODEHOUSE_PUBLIC_TELNET_HOST: telnet.packetloss404.com

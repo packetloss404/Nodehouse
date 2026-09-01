@@ -88,8 +88,10 @@ test('browser WebSockets accept same-origin and configured origins only', () => 
 
 test('Railway config requires persistent data and listener health', () => {
   const railway = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'railway.json'), 'utf8'));
+  const compose = fs.readFileSync(path.join(__dirname, '..', 'compose.yaml'), 'utf8');
   assert.equal(railway.deploy.requiredMountPath, '/app/data');
   assert.equal(railway.deploy.numReplicas, 1);
   assert.equal(railway.deploy.healthcheckPath, '/healthz');
   assert.equal(railway.deploy.startCommand, 'npm start');
+  assert.doesNotMatch(compose, /^\s+NODEHOUSE_DB_PATH:/m);
 });

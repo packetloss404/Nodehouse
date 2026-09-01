@@ -8,6 +8,8 @@ The committed `compose.yaml` builds the production image, publishes the web list
 
 Create `.env` from `.env.example`, set `NODE_ENV=production`, and supply a unique `NODEHOUSE_SYSOP_PASSWORD` of at least 12 characters. Then run:
 
+Leave `NODEHOUSE_DB_PATH` unset when upgrading an existing Docker installation so startup can discover and continue using `data/packetbbs.db` or `data/vibebbs.db`. New installations default to `data/nodehouse.db`.
+
 ```bash
 docker compose up -d --build
 docker compose ps

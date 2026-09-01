@@ -286,6 +286,8 @@ Board settings live in `config.json`; deployment and secrets use environment var
 
 The Nodehouse uses SQLite through better-sqlite3 in WAL mode. New installations use `data/nodehouse.db`; when an existing `data/packetbbs.db` or `data/vibebbs.db` is present, Nodehouse continues using it in place so the rename cannot strand caller data. `NODEHOUSE_DB_PATH` can explicitly select another location. Legacy `PACKETBBS_*` variables remain accepted for compatibility.
 
+For Docker upgrades, leave `NODEHOUSE_DB_PATH` unset unless deliberately selecting a database; the automatic discovery order is what keeps an existing renamed installation on its current database.
+
 The 14-table schema is created incrementally on startup and seeded on a brand-new board via namespaced CRUD modules over prepared statements:
 
 - **users** — Accounts with scrypt-hashed passwords (per-user salt), access levels, caller stats, and persistent menu mode
