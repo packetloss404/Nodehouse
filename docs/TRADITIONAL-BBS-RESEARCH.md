@@ -6,13 +6,13 @@
 
 ## Objective
 
-Make PacketBBS feel like a useful community bulletin board first: a caller connects, learns what changed, reads and answers messages, checks local electronic mail, sees who called, visits files or doors, and deliberately logs off. The Vibe material remains part of the board, but it no longer defines the shell.
+Make The Nodehouse feel like a useful community bulletin board first: a caller connects, learns what changed, reads and answers messages, checks local electronic mail, sees who called, visits files or doors, and deliberately logs off. The Vibe material remains part of the board, but it no longer defines the shell.
 
-PacketBBS should fit the rest of the `packet*` applications as the self-hosted community node: local state is owned by the operator, behavior is explicit, and future network boundaries remain auditable and recoverable.
+The Nodehouse should remain a self-hosted community node: local state is owned by the operator, behavior is explicit, and future network boundaries remain auditable and recoverable.
 
 ## Research note: Triad versus TriBBS
 
-The DOS software matching the requested comparison is **TriBBS**, originally associated with the TriTEL name. The preserved TriBBS 11.0 distribution contains the menu, manager help, caller manual, message menu, file menu, and TeleChat material used for this analysis. The Swedish group TRIAD also operated C*Base boards, but that is a different lineage and was not treated as the PacketBBS model.
+The DOS software matching the requested comparison is **TriBBS**, originally associated with the TriTEL name. The preserved TriBBS 11.0 distribution contains the menu, manager help, caller manual, message menu, file menu, and TeleChat material used for this analysis. The Swedish group TRIAD also operated C*Base boards, but that is a different lineage and was not treated as the Nodehouse model.
 
 ## What the old systems consistently got right
 
@@ -27,7 +27,7 @@ The DOS software matching the requested comparison is **TriBBS**, originally ass
 
 The common center is continuity, not decoration. ANSI art gives the board a face, but the product becomes a BBS when it remembers the caller, shows what changed, preserves reading state, and makes the next command predictable.
 
-## PacketBBS design rules
+## Nodehouse design rules
 
 1. Keep the core shell restrained: cyan, white, amber, an 80-column-safe layout, and conventional BBS nouns.
 2. Use **Message Conferences**, **Electronic Mail**, **File Libraries**, **Door Games**, **Bulletins**, **TeleChat**, **Last Callers**, and **System Information** in the primary navigation.

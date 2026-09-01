@@ -23,7 +23,7 @@ async function waitForHealth(webUrl, child) {
   let lastError;
   for (let attempt = 0; attempt < 40; attempt += 1) {
     if (child && child.exitCode !== null) {
-      throw new Error(`PacketBBS exited before becoming healthy (code ${child.exitCode}).`);
+      throw new Error(`The Nodehouse exited before becoming healthy (code ${child.exitCode}).`);
     }
     try {
       const response = await fetch(healthUrl);
@@ -41,7 +41,7 @@ async function waitForHealth(webUrl, child) {
 async function checkWebTerminal(webUrl) {
   const response = await fetch(new URL('/', webUrl));
   const body = await response.text();
-  if (!response.ok || !body.includes('PacketBBS') || !body.includes('@xterm/xterm')) {
+  if (!response.ok || !body.includes('The Nodehouse') || !body.includes('@xterm/xterm')) {
     throw new Error(`Web terminal smoke failed with HTTP ${response.status}.`);
   }
 }
@@ -57,7 +57,7 @@ function checkTelnet(host, port) {
 
     socket.on('data', (chunk) => {
       output += chunk.toString('utf8');
-      if (output.includes('PacketBBS') && output.includes('Username:')) {
+      if (output.includes('The Nodehouse') && output.includes('Username:')) {
         clearTimeout(timeout);
         socket.end();
         resolve();
@@ -85,7 +85,7 @@ function stopChild(child) {
 }
 
 async function runLocalSmoke() {
-  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'packetbbs-smoke-'));
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'nodehouse-smoke-'));
   const webPort = await getFreePort();
   let telnetPort = await getFreePort();
   while (telnetPort === webPort) telnetPort = await getFreePort();
@@ -97,8 +97,8 @@ async function runLocalSmoke() {
       ...process.env,
       HOST: '127.0.0.1',
       NODE_ENV: 'production',
-      PACKETBBS_DB_PATH: path.join(tempDir, 'packetbbs.db'),
-      PACKETBBS_SYSOP_PASSWORD: 'PacketBBS-Smoke-Password-2026',
+      NODEHOUSE_DB_PATH: path.join(tempDir, 'nodehouse.db'),
+      NODEHOUSE_SYSOP_PASSWORD: 'Nodehouse-Smoke-Password-2026',
       PORT: String(webPort),
       TELNET_PORT: String(telnetPort),
     },
@@ -111,7 +111,7 @@ async function runLocalSmoke() {
     const health = await waitForHealth(webUrl, child);
     await checkWebTerminal(webUrl);
     await checkTelnet('127.0.0.1', telnetPort);
-    console.log(`PacketBBS local smoke passed (v${health.version}, HTTP ${webPort}, Telnet ${telnetPort}).`);
+    console.log(`Nodehouse local smoke passed (v${health.version}, HTTP ${webPort}, Telnet ${telnetPort}).`);
   } catch (error) {
     throw new Error(`${error.message}\n${logs}`);
   } finally {
@@ -121,22 +121,24 @@ async function runLocalSmoke() {
 }
 
 async function runPublicSmoke(webUrl) {
-  const telnetHost = process.env.PACKETBBS_SMOKE_TELNET_HOST || process.env.PACKETBBS_PUBLIC_TELNET_HOST;
-  const telnetPort = Number(process.env.PACKETBBS_SMOKE_TELNET_PORT || process.env.PACKETBBS_PUBLIC_TELNET_PORT);
+  const telnetHost = process.env.NODEHOUSE_SMOKE_TELNET_HOST || process.env.NODEHOUSE_PUBLIC_TELNET_HOST ||
+    process.env.PACKETBBS_SMOKE_TELNET_HOST || process.env.PACKETBBS_PUBLIC_TELNET_HOST;
+  const telnetPort = Number(process.env.NODEHOUSE_SMOKE_TELNET_PORT || process.env.NODEHOUSE_PUBLIC_TELNET_PORT ||
+    process.env.PACKETBBS_SMOKE_TELNET_PORT || process.env.PACKETBBS_PUBLIC_TELNET_PORT);
   if (!telnetHost || !Number.isInteger(telnetPort) || telnetPort < 1 || telnetPort > 65535) {
-    throw new Error('Public smoke requires PACKETBBS_SMOKE_TELNET_HOST and PACKETBBS_SMOKE_TELNET_PORT.');
+    throw new Error('Public smoke requires NODEHOUSE_SMOKE_TELNET_HOST and NODEHOUSE_SMOKE_TELNET_PORT.');
   }
   const health = await waitForHealth(webUrl);
   await checkWebTerminal(webUrl);
   await checkTelnet(telnetHost, telnetPort);
-  console.log(`PacketBBS public smoke passed (v${health.version}, ${webUrl}, ${telnetHost}:${telnetPort}).`);
+  console.log(`Nodehouse public smoke passed (v${health.version}, ${webUrl}, ${telnetHost}:${telnetPort}).`);
 }
 
 async function main() {
-  const publicWebUrl = process.env.PACKETBBS_SMOKE_WEB_URL;
+  const publicWebUrl = process.env.NODEHOUSE_SMOKE_WEB_URL || process.env.PACKETBBS_SMOKE_WEB_URL;
   const work = publicWebUrl ? runPublicSmoke(publicWebUrl) : runLocalSmoke();
   const timeout = new Promise((_, reject) => {
-    const timer = setTimeout(() => reject(new Error('PacketBBS smoke timed out.')), SMOKE_TIMEOUT_MS);
+    const timer = setTimeout(() => reject(new Error('Nodehouse smoke timed out.')), SMOKE_TIMEOUT_MS);
     timer.unref();
   });
   await Promise.race([work, timeout]);

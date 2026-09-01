@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════
 // TOKEN TYCOON - Build Your AI Empire
-// (Original game for PacketBBS)
+// (Original game for The Nodehouse)
 // A turn-based strategy game where you build and manage
 // an AI startup. Hire engineers, train models, serve
 // customers, and compete for market dominance.

@@ -1,4 +1,4 @@
-// Multi-node manager for PacketBBS
+// Multi-node manager for The Nodehouse
 // Tracks all active connections/nodes
 
 class NodeManager {

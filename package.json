@@ -1,7 +1,7 @@
 {
-  "name": "packetbbs",
+  "name": "nodehouse",
   "version": "1.2.1",
-  "description": "PacketBBS - a modern, multi-node BBS with a retro terminal soul",
+  "description": "The Nodehouse, powered by Nodehouse - a modern, multi-node BBS with a retro terminal soul",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",

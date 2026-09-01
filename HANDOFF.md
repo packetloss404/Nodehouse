@@ -1,4 +1,4 @@
-# PacketBBS Community and Network Handoff
+# The Nodehouse Community and Network Handoff
 
 **Prepared:** 2026-07-30; implementation status updated 2026-08-01
 
@@ -8,7 +8,7 @@
 
 ## Executive recommendation
 
-PacketBBS should be the umbrella identity for a local-first community BBS. The existing Vibe personality should remain visible as one lively district inside that broader community rather than defining the entire system.
+The Nodehouse should be the umbrella identity for a local-first community BBS, powered by Nodehouse. The existing Vibe personality should remain visible as one lively district inside that broader community rather than defining the entire system.
 
 The product should recreate the behavior of a networked 1990s BBS before attempting every historical wire protocol:
 
@@ -18,29 +18,29 @@ The product should recreate the behavior of a networked 1990s BBS before attempt
 - Offline message packets
 - Curated file libraries
 - Doors, chat, polls, graffiti, callers, and other small community surfaces
-- Scheduled store-and-forward exchange between trusted PacketBBS nodes
+- Scheduled store-and-forward exchange between trusted Nodehouse nodes
 - Optional compatibility adapters for QWK, FTN/FidoNet, and NNTP
 
 The connective product idea is already in the name: messages, replies, files, and network traffic move in visible packets.
 
 ## Decisions recommended for approval
 
-1. Keep **PacketBBS** as the main product and system identity.
+1. Keep **The Nodehouse** as the main product identity and **Nodehouse** as the powering platform and repository name.
 2. Keep the implemented **Vibe Community** section as a special-interest district rather than the main shell identity.
 3. Keep Vibe Coding, AI Workflows, Vibe Wars, Dungeon of the Vibe Lords, neon ANSI treatments, and experimental features inside that community.
 4. Keep local mail, public conferences, network echoes, and external news as distinct user concepts.
 5. Implement BBS-era reader behavior before exposing historical network protocols.
-6. Use a canonical PacketBBS data model; treat QWK, FTN packets, NNTP articles, and SMTP messages as import/export adapters.
+6. Use a canonical Nodehouse data model; treat QWK, FTN packets, NNTP articles, and SMTP messages as import/export adapters.
 7. Begin PacketNet federation as a small authenticated hub-and-spoke network.
 8. Treat public Usenet feeds and Internet email as later operational products, not simple feature toggles.
 
 ## Product model
 
-| PacketBBS layer | Historical analogue | Intended behavior |
+| Nodehouse layer | Historical analogue | Intended behavior |
 |---|---|---|
 | Local E-Mail | BBS private mail | Private mail between callers on one board |
 | Local Conferences | Message bases/subboards | Public discussions that never leave this system |
-| PacketNet Echoes | FidoNet EchoMail | Public conferences replicated between trusted PacketBBS nodes |
+| PacketNet Echoes | FidoNet EchoMail | Public conferences replicated between trusted Nodehouse nodes |
 | NetMail | FidoNet/WWIV network mail | Private queued mail addressed to another board |
 | Offline Packets | QWK/REP | Download new content, read and reply offline, import replies later |
 | NetNews | Usenet/NNTP | Subscriptions, newscan, threading, filters, and optional real NNTP access |
@@ -51,8 +51,8 @@ The connective product idea is already in the name: messages, replies, files, an
 
 Every conference should disclose its actual scope:
 
-- `[LOCAL]` — exists only on this PacketBBS
-- `[PACKETNET]` — replicated with PacketBBS peers
+- `[LOCAL]` — exists only on this Nodehouse
+- `[PACKETNET]` — replicated with Nodehouse peers
 - `[FIDONET]` — imported from or exported to a configured FTN network
 - `[USENET]` — backed by a real configured NNTP source
 - `[READ ONLY]` — callers cannot post
@@ -64,7 +64,7 @@ Do not label a local discussion area “Usenet” until real NNTP-backed content
 ## Proposed information architecture
 
 ```text
-PacketBBS
+The Nodehouse
 ├── Start Here
 │   ├── Announcements
 │   ├── New User Help
@@ -199,7 +199,7 @@ Implement the newsreader experience before connecting to an external feed:
 
 If NNTP compatibility is added:
 
-1. Expose PacketBBS areas to authenticated clients.
+1. Expose Nodehouse areas to authenticated clients.
 2. Start read-only.
 3. Add authenticated posting with moderation and rate limits.
 4. Optionally ingest a small allowlist of external groups.
@@ -210,7 +210,7 @@ If NNTP compatibility is added:
 Offline packets should be a product differentiator:
 
 1. A caller selects conferences.
-2. PacketBBS gathers new articles, mail, bulletins, and new-file listings.
+2. Nodehouse gathers new articles, mail, bulletins, and new-file listings.
 3. The caller downloads a packet and disconnects.
 4. The caller reads and composes replies offline.
 5. A later upload imports replies and advances cursors.
@@ -242,7 +242,7 @@ The current code already provides:
 - A web SysOp panel
 - SQLite persistence
 
-The rename work preserves stable message-base IDs and existing `data/vibebbs.db` installations while using `data/packetbbs.db` for new installations.
+The rename work preserves stable message-base IDs and existing `data/packetbbs.db` and `data/vibebbs.db` installations while using `data/nodehouse.db` for new installations.
 
 The research and exact implementation boundary for this milestone are recorded in [docs/TRADITIONAL-BBS-RESEARCH.md](docs/TRADITIONAL-BBS-RESEARCH.md).
 
@@ -466,7 +466,7 @@ Before any node-to-node or public-network connection:
 
 ## Features to preserve as flavor, not friction
 
-Historically, time limits, upload ratios, credits, and scheduled mail existed because telephone lines and long-distance transfers were scarce. Modern PacketBBS can reuse the flavor without reproducing the punishment:
+Historically, time limits, upload ratios, credits, and scheduled mail existed because telephone lines and long-distance transfers were scarce. Modern Nodehouse can reuse the flavor without reproducing the punishment:
 
 - Daily door turns
 - Seasonal scoreboards
@@ -483,7 +483,7 @@ Do not block ordinary community participation behind upload ratios, download cre
 - Usenet binary groups
 - A full peer-to-peer PacketNet mesh
 - Treating QWK or FTN packet bytes as native database records
-- Assigning every PacketBBS user a FidoNet point number
+- Assigning every Nodehouse user a FidoNet point number
 - Trusting historical control headers as authorization
 - Rewriting the terminal product as a conventional social feed
 

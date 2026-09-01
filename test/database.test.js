@@ -5,16 +5,16 @@ const os = require('node:os');
 const path = require('node:path');
 const Database = require('better-sqlite3');
 
-const testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'packetbbs-test-'));
-const testDbPath = path.join(testDir, 'packetbbs.db');
+const testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'nodehouse-test-'));
+const testDbPath = path.join(testDir, 'nodehouse.db');
 const originalNodeEnv = process.env.NODE_ENV;
-process.env.PACKETBBS_DB_PATH = testDbPath;
+process.env.NODEHOUSE_DB_PATH = testDbPath;
 process.env.NODE_ENV = 'test';
 
 const database = require('../src/core/database');
 
 test.after(() => {
-  delete process.env.PACKETBBS_DB_PATH;
+  delete process.env.NODEHOUSE_DB_PATH;
   if (originalNodeEnv === undefined) delete process.env.NODE_ENV;
   else process.env.NODE_ENV = originalNodeEnv;
   fs.rmSync(testDir, { recursive: true, force: true });
@@ -50,10 +50,10 @@ test('database override, fresh content, and exact-match rename migration are saf
   const message = db.prepare('SELECT subject, body FROM messages WHERE base_id = 1 LIMIT 1').get();
   const userColumns = db.prepare('PRAGMA table_info(users)').all().map((column) => column.name);
 
-  assert.equal(bulletin.title, 'Welcome to PacketBBS!');
+  assert.equal(bulletin.title, 'Welcome to The Nodehouse!');
   assert.match(bulletin.body, /multi-node bulletin board system/);
   assert.match(bulletin.body, /Vibe Community/);
-  assert.equal(message.subject, 'Welcome to PacketBBS!');
+  assert.equal(message.subject, 'Welcome to The Nodehouse!');
   assert.doesNotMatch(message.body, /VibeBBS/);
   assert.ok(userColumns.includes('menu_mode'));
   assert.equal(
@@ -61,16 +61,15 @@ test('database override, fresh content, and exact-match rename migration are saf
     14
   );
 
-  const legacyBulletinBody = 'Welcome to VibeBBS, the bulletin board system for vibe coders!\r\n\r\n' +
-    'This is a place where retro meets the future. Share your AI-assisted\r\n' +
-    'coding projects, swap prompts, play door games, and connect with\r\n' +
-    'fellow vibe coders.\r\n\r\n' +
-    'Check out the Message Bases to start chatting, or hit up the Door\r\n' +
-    'Games for some classic fun.\r\n\r\n' +
-    'Keep vibing! - SysOp';
+  const previousBulletinBody = 'Welcome to PacketBBS, a multi-node bulletin board system.\r\n\r\n' +
+    'Check your electronic mail, scan the message conferences, browse the\r\n' +
+    'file libraries, meet other callers, and try the doors.\r\n\r\n' +
+    'The Vibe Community keeps the original experimental boards and games\r\n' +
+    'alive inside the larger system.\r\n\r\n' +
+    'Be excellent to each other. - SysOp';
 
   db.prepare('UPDATE bulletins SET title = ?, body = ? WHERE id = 1')
-    .run('Welcome to VibeBBS!', legacyBulletinBody);
+    .run('Welcome to PacketBBS!', previousBulletinBody);
   db.prepare('INSERT INTO bulletins (title, body, author) VALUES (?, ?, ?)')
     .run('Welcome to VibeBBS!', 'A caller-authored custom bulletin', 'Caller');
 
@@ -93,7 +92,7 @@ test('database override, fresh content, and exact-match rename migration are saf
   const migratedDb = database.init();
   const migratedStock = migratedDb.prepare('SELECT title FROM bulletins WHERE id = 1').get();
   const custom = migratedDb.prepare("SELECT title FROM bulletins WHERE author = 'Caller'").get();
-  assert.equal(migratedStock.title, 'Welcome to PacketBBS!');
+  assert.equal(migratedStock.title, 'Welcome to The Nodehouse!');
   assert.equal(custom.title, 'Welcome to VibeBBS!');
   const preservedVote = migratedDb.prepare(`
     SELECT p.question, po.option_text

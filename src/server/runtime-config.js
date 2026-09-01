@@ -14,9 +14,9 @@ function isProductionEnvironment(env = process.env) {
 function resolveRuntimeConfig(config, env = process.env) {
   const resolved = {
     host: env.HOST || '0.0.0.0',
-    webPort: parsePort(env.PORT || env.PACKETBBS_WEB_PORT, config.webPort, 'HTTP port'),
+    webPort: parsePort(env.PORT || env.NODEHOUSE_WEB_PORT || env.PACKETBBS_WEB_PORT, config.webPort, 'HTTP port'),
     telnetPort: parsePort(
-      env.TELNET_PORT || env.PACKETBBS_TELNET_PORT || env.RAILWAY_TCP_APPLICATION_PORT,
+      env.TELNET_PORT || env.NODEHOUSE_TELNET_PORT || env.PACKETBBS_TELNET_PORT || env.RAILWAY_TCP_APPLICATION_PORT,
       config.telnetPort,
       'Telnet port',
     ),

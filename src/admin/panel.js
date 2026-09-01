@@ -1,4 +1,4 @@
-// SysOp Admin Panel - Web-based administration for PacketBBS
+// SysOp Admin Panel - Web-based administration for The Nodehouse
 const express = require('express');
 const db = require('../core/database');
 const { createExpressRateLimit } = require('../server/guardrails');
@@ -146,7 +146,7 @@ function setupAdminPanel(app, nodeManager, config) {
 }
 
 function getAdminHTML(config) {
-  const bbsName = config.bbsName || 'PacketBBS';
+  const bbsName = config.bbsName || 'The Nodehouse';
   const messageBases = JSON.stringify(
     config.messageBases.map(({ id, name, section }) => ({ id, name, section }))
   );
@@ -288,11 +288,11 @@ function getAdminHTML(config) {
 </div>
 
 <script>
-const tokenKey = 'packetbbs_admin_token';
-const legacyTokenKey = 'vibebbs_admin_token';
-let token = localStorage.getItem(tokenKey) || localStorage.getItem(legacyTokenKey);
+const tokenKey = 'nodehouse_admin_token';
+const legacyTokenKeys = ['packetbbs_admin_token', 'vibebbs_admin_token'];
+let token = localStorage.getItem(tokenKey) || legacyTokenKeys.map(key => localStorage.getItem(key)).find(Boolean);
 if (token && !localStorage.getItem(tokenKey)) localStorage.setItem(tokenKey, token);
-localStorage.removeItem(legacyTokenKey);
+legacyTokenKeys.forEach(key => localStorage.removeItem(key));
 if (token) { showAdmin(); loadDashboard(); }
 
 async function api(path, opts = {}) {
@@ -318,7 +318,7 @@ async function doLogin() {
 
 function doLogout() {
   api('logout', { method: 'POST' });
-  token = null; localStorage.removeItem(tokenKey); localStorage.removeItem(legacyTokenKey);
+  token = null; localStorage.removeItem(tokenKey); legacyTokenKeys.forEach(key => localStorage.removeItem(key));
   document.getElementById('loginScreen').style.display = 'flex';
   document.getElementById('admin').style.display = 'none';
 }

@@ -1,9 +1,9 @@
 services:
-  packetbbs:
+  nodehouse:
     build:
       context: .
-    image: packetbbs:local
-    container_name: packetbbs
+    image: nodehouse:local
+    container_name: nodehouse
     restart: unless-stopped
     init: true
     env_file:
@@ -14,11 +14,11 @@ services:
       PORT: 8088
       TELNET_PORT: 2323
       TRUST_PROXY: "1"
-      PACKETBBS_DB_PATH: /app/data/packetbbs.db
-      PACKETBBS_ALLOWED_ORIGINS: https://bbs.packetloss404.com
-      PACKETBBS_PUBLIC_WEB_URL: https://bbs.packetloss404.com
-      PACKETBBS_PUBLIC_TELNET_HOST: telnet.packetloss404.com
-      PACKETBBS_PUBLIC_TELNET_PORT: "23"
+      NODEHOUSE_DB_PATH: /app/data/nodehouse.db
+      NODEHOUSE_ALLOWED_ORIGINS: https://bbs.packetloss404.com
+      NODEHOUSE_PUBLIC_WEB_URL: https://bbs.packetloss404.com
+      NODEHOUSE_PUBLIC_TELNET_HOST: telnet.packetloss404.com
+      NODEHOUSE_PUBLIC_TELNET_PORT: "23"
     ports:
       - "8088:8088"
       - "23:2323"

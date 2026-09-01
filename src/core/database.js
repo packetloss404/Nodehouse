@@ -5,38 +5,41 @@ const fs = require('fs');
 const { isProductionEnvironment } = require('../server/runtime-config');
 
 const PROJECT_ROOT = path.join(__dirname, '..', '..');
-const DEFAULT_DB_PATH = path.join(PROJECT_ROOT, 'data', 'packetbbs.db');
-const LEGACY_DB_PATH = path.join(PROJECT_ROOT, 'data', 'vibebbs.db');
+const DEFAULT_DB_PATH = path.join(PROJECT_ROOT, 'data', 'nodehouse.db');
+const LEGACY_DB_PATHS = [
+  path.join(PROJECT_ROOT, 'data', 'packetbbs.db'),
+  path.join(PROJECT_ROOT, 'data', 'vibebbs.db'),
+];
 const MIN_BOOTSTRAP_PASSWORD_LENGTH = 12;
 
 function resolveDatabasePath(env = process.env) {
-  if (env.PACKETBBS_DB_PATH) {
-    return path.resolve(PROJECT_ROOT, env.PACKETBBS_DB_PATH);
+  const configuredPath = env.NODEHOUSE_DB_PATH || env.PACKETBBS_DB_PATH;
+  if (configuredPath) {
+    return path.resolve(PROJECT_ROOT, configuredPath);
   }
   if (env.RAILWAY_VOLUME_MOUNT_PATH) {
-    return path.join(env.RAILWAY_VOLUME_MOUNT_PATH, 'packetbbs.db');
+    return path.join(env.RAILWAY_VOLUME_MOUNT_PATH, 'nodehouse.db');
   }
-  if (fs.existsSync(DEFAULT_DB_PATH) || !fs.existsSync(LEGACY_DB_PATH)) {
-    return DEFAULT_DB_PATH;
-  }
-  return LEGACY_DB_PATH;
+  if (fs.existsSync(DEFAULT_DB_PATH)) return DEFAULT_DB_PATH;
+  return LEGACY_DB_PATHS.find((candidate) => fs.existsSync(candidate)) || DEFAULT_DB_PATH;
 }
 
 function resolveBootstrapSysopPassword(env = process.env) {
-  const configured = env.PACKETBBS_SYSOP_PASSWORD;
+  const configured = env.NODEHOUSE_SYSOP_PASSWORD || env.PACKETBBS_SYSOP_PASSWORD;
   if (configured !== undefined) {
     if (configured.length < MIN_BOOTSTRAP_PASSWORD_LENGTH) {
-      throw new Error(`PACKETBBS_SYSOP_PASSWORD must be at least ${MIN_BOOTSTRAP_PASSWORD_LENGTH} characters.`);
+      throw new Error(`NODEHOUSE_SYSOP_PASSWORD must be at least ${MIN_BOOTSTRAP_PASSWORD_LENGTH} characters.`);
     }
     return configured;
   }
 
   const insecureDevelopmentMode = env.NODE_ENV === 'development' ||
     env.NODE_ENV === 'test' ||
+    env.NODEHOUSE_ALLOW_INSECURE_DEV_PASSWORD === '1' ||
     env.PACKETBBS_ALLOW_INSECURE_DEV_PASSWORD === '1';
   if (!insecureDevelopmentMode || isProductionEnvironment(env)) {
     throw new Error(
-      'A fresh PacketBBS database requires PACKETBBS_SYSOP_PASSWORD. ' +
+      'A fresh Nodehouse database requires NODEHOUSE_SYSOP_PASSWORD. ' +
       'The built-in development password is disabled outside explicit development/test mode.'
     );
   }
@@ -66,7 +69,7 @@ const seedContent = {
       'Remember: Be excellent to each other. Keep vibing!',
     graffitiMessage: 'First! Welcome to VibeBBS - leave your mark here!',
   },
-  previous: {
+  packetbbs: {
     bulletinTitle: 'Welcome to PacketBBS!',
     bulletinBody: 'Welcome to PacketBBS, a terminal community for builders and curious minds!\r\n\r\n' +
       'This is where retro BBS culture meets modern projects. Share what you are\r\n' +
@@ -83,7 +86,7 @@ const seedContent = {
       'Dial in. Drop a packet. Stay awhile.',
     graffitiMessage: 'First! Welcome to PacketBBS - leave your mark here!',
   },
-  current: {
+  packetbbsCurrent: {
     bulletinTitle: 'Welcome to PacketBBS!',
     bulletinBody: 'Welcome to PacketBBS, a multi-node bulletin board system.\r\n\r\n' +
       'Check your electronic mail, scan the message conferences, browse the\r\n' +
@@ -99,6 +102,23 @@ const seedContent = {
       'browse the file libraries, and visit the doors.\r\n\r\n' +
       'Press ? at the Main prompt to redisplay the command menu.',
     graffitiMessage: 'First caller on the PacketBBS one-liner board!',
+  },
+  current: {
+    bulletinTitle: 'Welcome to The Nodehouse!',
+    bulletinBody: 'Welcome to The Nodehouse, a multi-node bulletin board system powered by Nodehouse.\r\n\r\n' +
+      'Check your electronic mail, scan the message conferences, browse the\r\n' +
+      'file libraries, meet other callers, and try the doors.\r\n\r\n' +
+      'The Vibe Community keeps the original experimental boards and games\r\n' +
+      'alive inside the larger system.\r\n\r\n' +
+      'Be excellent to each other. - SysOp',
+    messageSubject: 'Welcome to The Nodehouse!',
+    messageBody: 'Welcome to the General Discussion conference.\r\n' +
+      'Introduce yourself, join a thread, or tell us what brought you here.\r\n\r\n' +
+      'Be excellent to each other.',
+    motdBody: 'The Nodehouse is online. Check your mail, run a new-message scan,\r\n' +
+      'browse the file libraries, and visit the doors.\r\n\r\n' +
+      'Press ? at the Main prompt to redisplay the command menu.',
+    graffitiMessage: 'First caller on The Nodehouse one-liner board!',
   },
 };
 
@@ -368,7 +388,7 @@ function migrateLegacySeedContent() {
   const current = seedContent.current;
 
   db.transaction(() => {
-    for (const source of [seedContent.legacy, seedContent.previous]) {
+    for (const source of [seedContent.legacy, seedContent.packetbbs, seedContent.packetbbsCurrent]) {
       db.prepare(`
         UPDATE bulletins SET title = ?, body = ?
         WHERE author = 'SysOp' AND title = ? AND body = ?

@@ -1,4 +1,4 @@
-// ANSI escape code utilities and art for PacketBBS
+// ANSI escape code utilities and art for The Nodehouse
 
 const { version } = require('../../package.json');
 
@@ -187,16 +187,13 @@ ansi.art.welcome = () => {
 
   return ansi.clear +
 `${d}
-${c}    ██████╗  █████╗  ██████╗██╗  ██╗███████╗████████╗
-${m}    ██╔══██╗██╔══██╗██╔════╝██║ ██╔╝██╔════╝╚══██╔══╝
-${y}    ██████╔╝███████║██║     █████╔╝ █████╗     ██║
-${g}    ██╔═══╝ ██╔══██║██║     ██╔═██╗ ██╔══╝     ██║
-${w}    ██║     ██║  ██║╚██████╗██║  ██╗███████╗   ██║
-${c}    ╚═╝     ╚═╝  ╚═╝ ╚═════╝╚═╝  ╚═╝╚══════╝   ╚═╝
-${m}                         B B S
+${c}    ╔══════════════════════════════════════════════════════╗
+${c}    ║${w}                    THE NODEHOUSE                     ${c}║
+${c}    ║${m}                 powered by Nodehouse                 ${c}║
+${c}    ╚══════════════════════════════════════════════════════╝
 ${r}
 ${d}    ┌──────────────────────────────────────────────────────┐
-${d}    │  ${w}${'PacketBBS: the self-hosted Packet community node'.padEnd(50)}${d}  │
+${d}    │  ${w}${'The Nodehouse: a self-hosted community BBS'.padEnd(50)}${d}  │
 ${d}    │  ${dm}${'Messages, files, callers, chat, and door games'.padEnd(50)}${d}  │
 ${d}    └──────────────────────────────────────────────────────┘
 ${r}
@@ -228,7 +225,7 @@ ansi.art.mainMenu = (status = {}) => {
   const d = ansi.cyan;
 
   const rows = [
-    framedRow(d, `  ${c}PACKETBBS // NODE ${w}${String(status.nodeNum || 0).substring(0, 3).padEnd(3)}${d}                ${w}MAIN MENU`),
+    framedRow(d, `  ${c}NODEHOUSE // NODE ${w}${String(status.nodeNum || 0).substring(0, 3).padEnd(3)}${d}                ${w}MAIN MENU`),
     `${d}    ├──────────────────────────────────────────────────────┤`,
     framedRow(d, `  ${g}Caller:${w} ${String(status.username || '').substring(0, 16).padEnd(16)} ${g}Call:${w} ${String(status.callCount || 0)}`),
     framedRow(d, `  ${g}Mail:${w} ${String(status.unreadMail || 0)}   ${g}New:${w} ${String(status.unreadMessages || 0)}   ${g}Mode:${w} ${String(status.menuMode || 'NOVICE').substring(0, 8)}`),
@@ -272,7 +269,7 @@ ansi.art.logonSummary = (summary = {}) => {
   const previousCaller = summary.previousCaller || 'None recorded';
 
   const rows = [
-    framedRow(d, `  ${c}PACKETBBS // SINCE YOUR LAST CALL`),
+    framedRow(d, `  ${c}NODEHOUSE // SINCE YOUR LAST CALL`),
     `${d}    ├──────────────────────────────────────────────────────┤`,
     framedRow(d, `  ${g}Welcome:${w} ${String(summary.username || '').substring(0, 18).padEnd(18)} ${g}Node:${w} ${String(summary.nodeNum || 0)}`),
     framedRow(d, `  ${g}Last call:${w} ${String(summary.lastCall || 'First call').substring(0, 32)}`),
@@ -302,7 +299,7 @@ ansi.art.messageBases = (bases) => {
 
   let screen = ansi.clear +
     `${d}    ┌──────────────────────────────────────────────────────┐\r\n` +
-    `${framedRow(d, `  ${c}PACKETBBS // MESSAGE CONFERENCES`)}\r\n` +
+    `${framedRow(d, `  ${c}NODEHOUSE // MESSAGE CONFERENCES`)}\r\n` +
     `${d}    ├──────────────────────────────────────────────────────┤\r\n` +
     `${framedRow(d, `  ${y}${'#'.padEnd(4)}${w}${'Conference Name'.padEnd(30)}${g}${'Msgs'.padStart(6)}  New`)}\r\n` +
     `${d}    ├──────────────────────────────────────────────────────┤\r\n`;
@@ -372,7 +369,7 @@ ${c}    ║  ${y}  █  ██ █   █  █   █     █   █  ██   █�
 ${c}    ║  ${y}  █   █ █   █  █   █      █ █   ██   █    █ █      ${c}║
 ${c}    ║  ${y}  ████  █████  █████       █   ████  ██████ █████  ${c}║
 ${c}    ║                                                      ║
-${c}    ║  ${m}Thanks for calling PacketBBS. Stay curious! ${w}✦       ${c}║
+${c}    ║  ${m}Thanks for calling The Nodehouse. Stay curious! ${w}✦   ${c}║
 ${c}    ║  ${w}Your session has been logged. Call again soon!     ${c}║
 ${c}    ║                                                      ║
 ${c}    ╚══════════════════════════════════════════════════════╝${r}
@@ -421,7 +418,7 @@ ansi.art.lastCallers = (calls = []) => {
 
   let screen = ansi.clear +
     `${d}    ┌──────────────────────────────────────────────────────┐\r\n` +
-    `${framedRow(d, `  ${c}PACKETBBS // LAST CALLERS`)}\r\n` +
+    `${framedRow(d, `  ${c}NODEHOUSE // LAST CALLERS`)}\r\n` +
     `${d}    ├──────────────────────────────────────────────────────┤\r\n` +
     `${framedRow(d, `  ${y}${'Caller'.padEnd(18)}${w}${'Logon'.padEnd(18)}${g}${'Node'.padEnd(6)}${c}Status`)}\r\n` +
     `${d}    ├──────────────────────────────────────────────────────┤\r\n`;

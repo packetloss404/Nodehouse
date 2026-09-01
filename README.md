@@ -1,23 +1,16 @@
-# PacketBBS
+# The Nodehouse
 
-```
-██████╗  █████╗  ██████╗██╗  ██╗███████╗████████╗
-██╔══██╗██╔══██╗██╔════╝██║ ██╔╝██╔════╝╚══██╔══╝
-██████╔╝███████║██║     █████╔╝ █████╗     ██║
-██╔═══╝ ██╔══██║██║     ██╔═██╗ ██╔══╝     ██║
-██║     ██║  ██║╚██████╗██║  ██╗███████╗   ██║
-╚═╝     ╚═╝  ╚═╝ ╚═════╝╚═╝  ╚═╝╚══════╝   ╚═╝  BBS
-```
+**A modern BBS system.**
 
-**A community BBS for builders, tinkerers, and curious minds.**
+*Your house on the wire.*
 
-PacketBBS is the self-hosted community node in the Packet family: a place for callers, messages, files, chat, and doors. Connect by Telnet for the authentic experience or use the browser terminal. Both transports feed one shared session engine, so callers across 16 nodes see each other in real time.
+The Nodehouse is a self-hosted community BBS powered by Nodehouse: a place for callers, messages, files, chat, and doors. Connect by Telnet for the authentic experience or use the browser terminal. Both transports feed one shared session engine, so callers across 16 nodes see each other in real time.
 
-The original vibe-coding personality still has a home. **Vibe Community** is a deliberately neon corner of the message network, joined by the Vibe Lounge and named door worlds. It is part of PacketBBS, not the premise of the whole system.
+The original vibe-coding personality still has a home. **Vibe Community** is a deliberately neon corner of the message network, joined by the Vibe Lounge and named door worlds. It is part of The Nodehouse, not the premise of the whole system.
 
 ## Direction
 
-PacketBBS is evolving toward a local-first community node inspired by the best interaction patterns of early- and late-1990s BBS systems:
+The Nodehouse is evolving toward a local-first community node inspired by the best interaction patterns of early- and late-1990s BBS systems:
 
 - A caller loop centered on mail waiting, new-message scans, new files, callers, doors, and deliberate logoff
 - Clear separation between local E-Mail, local conferences, shared PacketNet echoes, routed NetMail, and external NetNews
@@ -62,8 +55,8 @@ See [HANDOFF.md](HANDOFF.md) for acceptance criteria and protocol references.
 ## Quick Start
 
 ```bash
-git clone git@github.com:packetloss404/packetbbs.git
-cd packetbbs
+git clone git@github.com:packetloss404/Nodehouse.git
+cd Nodehouse
 npm install
 cp .env.example .env
 npm run verify
@@ -80,7 +73,7 @@ Then connect:
 | Admin Panel | http://localhost:8088/admin |
 | Telnet | `telnet localhost 2323` |
 
-On a fresh local development database, `.env.example` permits the development-only login `SysOp` / `sysop`. A fresh production or Railway database instead requires `PACKETBBS_SYSOP_PASSWORD` with at least 12 characters; PacketBBS will not start with the known default.
+On a fresh local development database, `.env.example` permits the development-only login `SysOp` / `sysop`. A fresh production or Railway database instead requires `NODEHOUSE_SYSOP_PASSWORD` with at least 12 characters; The Nodehouse will not start with the known default.
 
 Validate the codebase with the same syntax-and-test loop used for this milestone:
 
@@ -97,21 +90,21 @@ The production Compose stack publishes HTTP on host port `8088` and maps standar
 
 ```bash
 cp .env.example .env
-# Set NODE_ENV=production and a long PACKETBBS_SYSOP_PASSWORD in .env.
+# Set NODE_ENV=production and a long NODEHOUSE_SYSOP_PASSWORD in .env.
 docker compose up -d --build
 docker compose ps
-docker compose logs --tail=100 packetbbs
+docker compose logs --tail=100 nodehouse
 ```
 
 Put an HTTP reverse proxy in front of `8088`; WebSocket upgrades use the same endpoint. Raw Telnet must be forwarded directly as TCP and is intentionally plaintext.
 
 ## Screenshots (What You'll See)
 
-PacketBBS renders the caller experience entirely in ANSI art. Here's what the flow looks like:
+The Nodehouse renders the caller experience entirely in ANSI art. Here's what the flow looks like:
 
 ```
 ┌──────────────────────────────────────────────────────┐
-│  PacketBBS: the self-hosted Packet community node    │
+│  The Nodehouse: a self-hosted community BBS          │
 │  Messages, files, callers, chat, and door games      │
 └──────────────────────────────────────────────────────┘
 
@@ -198,7 +191,7 @@ An interactive voting subsystem (`polls`, `poll_options`, `poll_votes` tables):
 |---|------|-------------|
 | 1 | Utilities | Useful scripts, tools, and small programs |
 | 2 | Text Files & Docs | Guides, notes, zines, and reference material |
-| 3 | Community Uploads | Files shared by PacketBBS callers |
+| 3 | Community Uploads | Files shared by Nodehouse callers |
 | 4 | ANSI Art | ANSI art files and packs |
 
 > Note: file areas are browsable catalogs (listing + metadata). Actual upload/download transfer is not yet wired.
@@ -258,7 +251,8 @@ Board settings live in `config.json`; deployment and secrets use environment var
 
 ```json
 {
-  "bbsName": "PacketBBS",
+  "bbsName": "The Nodehouse",
+  "poweredBy": "Nodehouse",
   "sysopName": "SysOp",
   "telnetPort": 2323,
   "webPort": 8088,
@@ -282,15 +276,15 @@ Board settings live in `config.json`; deployment and secrets use environment var
 
 | Environment variable | Purpose |
 |----------------------|---------|
-| `PORT` / `PACKETBBS_WEB_PORT` | HTTP port; Railway supplies `PORT` |
-| `TELNET_PORT` / `PACKETBBS_TELNET_PORT` | Independent raw Telnet listener port; Railway's TCP application port is also detected |
-| `PACKETBBS_DB_PATH` | SQLite path; use `/app/data/packetbbs.db` with a persistent container volume |
-| `PACKETBBS_SYSOP_PASSWORD` | Required strong seed password for a fresh production database |
-| `PACKETBBS_ALLOWED_ORIGINS` | Optional comma-separated additional browser WebSocket origins |
+| `PORT` / `NODEHOUSE_WEB_PORT` | HTTP port; Railway supplies `PORT` |
+| `TELNET_PORT` / `NODEHOUSE_TELNET_PORT` | Independent raw Telnet listener port; Railway's TCP application port is also detected |
+| `NODEHOUSE_DB_PATH` | SQLite path; use `/app/data/nodehouse.db` with a persistent container volume |
+| `NODEHOUSE_SYSOP_PASSWORD` | Required strong seed password for a fresh production database |
+| `NODEHOUSE_ALLOWED_ORIGINS` | Optional comma-separated additional browser WebSocket origins |
 
 ## Database
 
-PacketBBS uses SQLite through better-sqlite3 in WAL mode. New installations use `data/packetbbs.db`; when only an existing `data/vibebbs.db` is present, PacketBBS continues using it in place so the rename cannot strand caller data. `PACKETBBS_DB_PATH` can explicitly select another location.
+The Nodehouse uses SQLite through better-sqlite3 in WAL mode. New installations use `data/nodehouse.db`; when an existing `data/packetbbs.db` or `data/vibebbs.db` is present, Nodehouse continues using it in place so the rename cannot strand caller data. `NODEHOUSE_DB_PATH` can explicitly select another location. Legacy `PACKETBBS_*` variables remain accepted for compatibility.
 
 The 14-table schema is created incrementally on startup and seeded on a brand-new board via namespaced CRUD modules over prepared statements:
 
@@ -306,7 +300,7 @@ The 14-table schema is created incrementally on startup and seeded on a brand-ne
 - **motd** — Message of the day shown on login
 - **dungeon_players**, **dungeon_history** — Persistent character state and AI-dungeon context
 
-The SysOp account, welcome content, a sample poll, MOTD, and starter graffiti are seeded automatically on first launch. The familiar `SysOp / sysop` credentials are limited to explicit development/test mode; production seeding requires `PACKETBBS_SYSOP_PASSWORD`.
+The SysOp account, welcome content, a sample poll, MOTD, and starter graffiti are seeded automatically on first launch. The familiar `SysOp / sysop` credentials are limited to explicit development/test mode; production seeding requires `NODEHOUSE_SYSOP_PASSWORD`.
 
 ## Tech Stack
 
@@ -325,7 +319,7 @@ Five runtime dependencies, zero build step.
 ## Project Structure
 
 ```
-packetbbs/
+Nodehouse/
 ├── server.js                  # Entry point — starts all servers
 ├── config.json                # BBS configuration
 ├── Dockerfile                 # Production Node.js container image

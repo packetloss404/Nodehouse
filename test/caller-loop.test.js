@@ -4,10 +4,10 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 
-const testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'packetbbs-caller-loop-'));
-const testDbPath = path.join(testDir, 'packetbbs.db');
+const testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'nodehouse-caller-loop-'));
+const testDbPath = path.join(testDir, 'nodehouse.db');
 const originalNodeEnv = process.env.NODE_ENV;
-process.env.PACKETBBS_DB_PATH = testDbPath;
+process.env.NODEHOUSE_DB_PATH = testDbPath;
 process.env.NODE_ENV = 'test';
 
 const database = require('../src/core/database');
@@ -20,7 +20,7 @@ let db;
 
 test.after(() => {
   if (db && db.open) db.close();
-  delete process.env.PACKETBBS_DB_PATH;
+  delete process.env.NODEHOUSE_DB_PATH;
   if (originalNodeEnv === undefined) delete process.env.NODE_ENV;
   else process.env.NODE_ENV = originalNodeEnv;
   fs.rmSync(testDir, { recursive: true, force: true });

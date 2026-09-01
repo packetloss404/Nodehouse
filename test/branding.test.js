@@ -12,10 +12,12 @@ const webTerminalHtml = fs.readFileSync(
   'utf8',
 );
 
-test('PacketBBS is the primary product identity', () => {
-  assert.equal(packageInfo.name, 'packetbbs');
-  assert.equal(config.bbsName, 'PacketBBS');
-  assert.match(ansi.stripCodes(ansi.art.welcome()), /PacketBBS/);
+test('The Nodehouse is the primary identity and is powered by Nodehouse', () => {
+  assert.equal(packageInfo.name, 'nodehouse');
+  assert.equal(config.bbsName, 'The Nodehouse');
+  assert.equal(config.poweredBy, 'Nodehouse');
+  assert.match(ansi.stripCodes(ansi.art.welcome()), /THE NODEHOUSE/);
+  assert.match(ansi.stripCodes(ansi.art.welcome()), /powered by Nodehouse/);
   assert.doesNotMatch(ansi.stripCodes(ansi.art.welcome()), /VibeBBS/);
 });
 

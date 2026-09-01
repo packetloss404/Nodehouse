@@ -63,7 +63,10 @@ function parseAllowedOrigins(value) {
     .filter(Boolean));
 }
 
-function isAllowedWebSocketOrigin(request, configuredOrigins = process.env.PACKETBBS_ALLOWED_ORIGINS) {
+function isAllowedWebSocketOrigin(
+  request,
+  configuredOrigins = process.env.NODEHOUSE_ALLOWED_ORIGINS || process.env.PACKETBBS_ALLOWED_ORIGINS,
+) {
   const origin = request.headers.origin;
   if (!origin) return true;
 

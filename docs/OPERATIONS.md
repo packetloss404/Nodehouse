@@ -1,31 +1,31 @@
-# PacketBBS Operations Runbook
+# The Nodehouse Operations Runbook
 
-This runbook is the release, Docker, Railway, backup, recovery, and public-smoke contract for PacketBBS 1.2.1.
+This runbook is the release, Docker, Railway, backup, recovery, and public-smoke contract for The Nodehouse 1.2.1.
 
 ## Docker service contract
 
 The committed `compose.yaml` builds the production image, publishes the web listener on host port `8088`, publishes raw Telnet on standard host port `23`, and persists `/app/data` and `/app/files` in directories beside the Compose file. Caddy or another reverse proxy should send the web hostname to port `8088` with WebSocket upgrades intact. Telnet is a separate TCP service and never passes through the HTTP reverse proxy.
 
-Create `.env` from `.env.example`, set `NODE_ENV=production`, and supply a unique `PACKETBBS_SYSOP_PASSWORD` of at least 12 characters. Then run:
+Create `.env` from `.env.example`, set `NODE_ENV=production`, and supply a unique `NODEHOUSE_SYSOP_PASSWORD` of at least 12 characters. Then run:
 
 ```bash
 docker compose up -d --build
 docker compose ps
-docker compose logs --tail=100 packetbbs
+docker compose logs --tail=100 nodehouse
 ```
 
 Before an upgrade, use SQLite's online backup API or stop the container before copying the database. Preserve both `data/` and `files/`. After an upgrade, require a healthy container and run the public HTTP/Telnet smoke test. At the network edge, forward TCP/80 and TCP/443 to the reverse proxy and TCP/23 directly to the Docker host.
 
 ## Railway service contract
 
-The committed `railway.json` requires one replica, a `/healthz` deployment health check, and a persistent volume mounted at `/app/data`. PacketBBS reads Railway's `PORT` for HTTP and keeps raw Telnet on a separate `TELNET_PORT` (or Railway's injected `RAILWAY_TCP_APPLICATION_PORT`).
+The committed `railway.json` requires one replica, a `/healthz` deployment health check, and a persistent volume mounted at `/app/data`. Nodehouse reads Railway's `PORT` for HTTP and keeps raw Telnet on a separate `TELNET_PORT` (or Railway's injected `RAILWAY_TCP_APPLICATION_PORT`).
 
 Configure these service variables before deploying a fresh board:
 
 ```text
 NODE_ENV=production
-PACKETBBS_DB_PATH=/app/data/packetbbs.db
-PACKETBBS_SYSOP_PASSWORD=<long random password, at least 12 characters>
+NODEHOUSE_DB_PATH=/app/data/nodehouse.db
+NODEHOUSE_SYSOP_PASSWORD=<long random password, at least 12 characters>
 TELNET_PORT=2323
 ```
 
@@ -33,17 +33,17 @@ Optional variables:
 
 ```text
 ANTHROPIC_API_KEY=<Door 5 only>
-PACKETBBS_ALLOWED_ORIGINS=https://bbs.example.com
-PACKETBBS_PUBLIC_WEB_URL=https://bbs.example.com
-PACKETBBS_PUBLIC_TELNET_HOST=bbs.example.com
-PACKETBBS_PUBLIC_TELNET_PORT=<Railway TCP proxy port>
+NODEHOUSE_ALLOWED_ORIGINS=https://bbs.example.com
+NODEHOUSE_PUBLIC_WEB_URL=https://bbs.example.com
+NODEHOUSE_PUBLIC_TELNET_HOST=bbs.example.com
+NODEHOUSE_PUBLIC_TELNET_PORT=<Railway TCP proxy port>
 ```
 
 Do not set `PORT` on Railway unless deliberately overriding its provided HTTP port.
 
 In Railway networking:
 
-1. Attach a volume to the PacketBBS service at `/app/data`.
+1. Attach a volume to the Nodehouse service at `/app/data`.
 2. Enable HTTP public networking for the web terminal and `/admin`.
 3. Add a TCP Proxy whose application port is `2323`.
 4. Record the generated TCP proxy domain and external port. The external port is normally not `2323`.
@@ -68,14 +68,14 @@ npm run smoke
 npm audit --omit=dev --audit-level=high
 ```
 
-`npm run smoke` starts PacketBBS against an isolated temporary SQLite database, checks `/healthz`, loads the web terminal, opens the Telnet listener, and shuts the process down.
+`npm run smoke` starts The Nodehouse against an isolated temporary SQLite database, checks `/healthz`, loads the web terminal, opens the Telnet listener, and shuts the process down.
 
 For a deployed board, provide the public endpoints instead of starting a local process:
 
 ```powershell
-$env:PACKETBBS_SMOKE_WEB_URL = 'https://bbs.example.com'
-$env:PACKETBBS_SMOKE_TELNET_HOST = 'bbs.example.com'
-$env:PACKETBBS_SMOKE_TELNET_PORT = '15140'
+$env:NODEHOUSE_SMOKE_WEB_URL = 'https://bbs.example.com'
+$env:NODEHOUSE_SMOKE_TELNET_HOST = 'bbs.example.com'
+$env:NODEHOUSE_SMOKE_TELNET_PORT = '15140'
 npm run smoke
 ```
 
@@ -83,7 +83,7 @@ The public smoke uses no caller credentials and only reads the health response, 
 
 ## Health and monitoring
 
-`GET /healthz` returns `200` only when the process can query SQLite. The response includes the PacketBBS version, process uptime, database status, and online-node count. It contains no credentials or filesystem paths.
+`GET /healthz` returns `200` only when the process can query SQLite. The response includes the Nodehouse version, process uptime, database status, and online-node count. It contains no credentials or filesystem paths.
 
 Railway uses this endpoint while activating a deployment. It is not continuous monitoring; use a separate uptime monitor if ongoing alerting is required.
 
@@ -91,25 +91,25 @@ Railway uses this endpoint while activating a deployment. It is not continuous m
 
 Enable daily and weekly backups for the `/app/data` Railway volume. Take a manual backup before schema changes or a release rollback.
 
-For a local stopped service, preserve the entire `data/` directory so the SQLite database and any WAL sidecars remain together. Do not copy only the main `.db` file while PacketBBS is running.
+For a local stopped service, preserve the entire `data/` directory so the SQLite database and any WAL sidecars remain together. Do not copy only the main `.db` file while Nodehouse is running.
 
 Recovery procedure:
 
 1. Stop or isolate the current service.
 2. Restore the selected Railway volume backup to `/app/data`.
-3. Confirm `PACKETBBS_DB_PATH=/app/data/packetbbs.db`.
-4. Deploy the known-good PacketBBS tag or commit.
+3. Confirm `NODEHOUSE_DB_PATH=/app/data/nodehouse.db`.
+4. Deploy the known-good Nodehouse tag or commit.
 5. Check `/healthz`, then run the public HTTP/Telnet smoke command.
 6. Sign in as SysOp and verify callers, messages, mail, and the recent call log.
 
 ## Credential and exposure checklist
 
-- A fresh production database will not start without `PACKETBBS_SYSOP_PASSWORD` of at least 12 characters.
+- A fresh production database will not start without `NODEHOUSE_SYSOP_PASSWORD` of at least 12 characters.
 - The `SysOp / sysop` seed exists only in explicit development/test mode.
 - Existing databases are not silently re-keyed. Reset any historical default SysOp password before public exposure.
 - New caller and admin-reset passwords require at least eight characters.
-- Telnet is plaintext by design. Do not reuse a PacketBBS password on any other service.
-- Browser WebSockets accept same-origin requests plus explicit `PACKETBBS_ALLOWED_ORIGINS` entries.
+- Telnet is plaintext by design. Do not reuse a Nodehouse password on any other service.
+- Browser WebSockets accept same-origin requests plus explicit `NODEHOUSE_ALLOWED_ORIGINS` entries.
 - Login, registration, connection, request-size, and terminal-input limits are process-local safeguards. Put an internet-facing reverse proxy or platform protection in front of HTTP for broader abuse control.
 
 ## Rollback

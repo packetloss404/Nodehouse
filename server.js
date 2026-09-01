@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════
-//  PacketBBS - A modern BBS with a retro terminal soul
+//  The Nodehouse, powered by Nodehouse
 //  Hybrid Telnet + Web Terminal | Multi-Node | Persistent
 // ═══════════════════════════════════════════════════════════
 
@@ -52,7 +52,7 @@ app.get('/healthz', (req, res) => {
   res.set('Cache-Control', 'no-store');
   res.status(databaseHealthy ? 200 : 503).json({
     status: databaseHealthy ? 'ok' : 'unhealthy',
-    service: 'packetbbs',
+    service: 'nodehouse',
     version,
     uptimeSeconds: Math.floor((Date.now() - startTime) / 1000),
     database: databaseHealthy ? 'ok' : 'unavailable',
@@ -81,18 +81,20 @@ const telnetServer = createTelnetServer(nodeManager, config);
 telnetServer.listen(runtime.telnetPort, runtime.host, () => {
   console.log('');
   console.log('  ╔══════════════════════════════════════════════════╗');
-  console.log('  ║                    PACKETBBS                     ║');
-  console.log('  ║          DIAL IN · DROP A PACKET · STAY          ║');
+  console.log('  ║                  THE NODEHOUSE                   ║');
+  console.log('  ║               powered by Nodehouse               ║');
   console.log('  ╚══════════════════════════════════════════════════╝');
   console.log('');
   console.log(`  Telnet server listening on ${runtime.host}:${runtime.telnetPort}`);
 });
 
 httpServer.listen(runtime.webPort, runtime.host, () => {
-  const publicWebUrl = process.env.PACKETBBS_PUBLIC_WEB_URL ||
+  const publicWebUrl = process.env.NODEHOUSE_PUBLIC_WEB_URL || process.env.PACKETBBS_PUBLIC_WEB_URL ||
     (process.env.RAILWAY_PUBLIC_DOMAIN ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}` : null);
-  const publicTelnetHost = process.env.PACKETBBS_PUBLIC_TELNET_HOST || process.env.RAILWAY_TCP_PROXY_DOMAIN;
-  const publicTelnetPort = process.env.PACKETBBS_PUBLIC_TELNET_PORT || process.env.RAILWAY_TCP_PROXY_PORT;
+  const publicTelnetHost = process.env.NODEHOUSE_PUBLIC_TELNET_HOST ||
+    process.env.PACKETBBS_PUBLIC_TELNET_HOST || process.env.RAILWAY_TCP_PROXY_DOMAIN;
+  const publicTelnetPort = process.env.NODEHOUSE_PUBLIC_TELNET_PORT ||
+    process.env.PACKETBBS_PUBLIC_TELNET_PORT || process.env.RAILWAY_TCP_PROXY_PORT;
   console.log(`  Web terminal:  ${publicWebUrl || `http://localhost:${runtime.webPort}`}`);
   console.log(`  Admin panel:   ${(publicWebUrl || `http://localhost:${runtime.webPort}`)}/admin`);
   console.log(`  Health check:  ${(publicWebUrl || `http://localhost:${runtime.webPort}`)}/healthz`);

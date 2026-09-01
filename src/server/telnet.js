@@ -1,4 +1,4 @@
-// Telnet server for PacketBBS
+// Telnet server for The Nodehouse
 const net = require('net');
 const BBSSession = require('../core/bbs');
 const { FixedWindowLimiter, getSocketAddress } = require('./guardrails');

@@ -1183,7 +1183,7 @@ class BBSSession {
 
     const screen = ansi.clear +
       `${d}    ┌──────────────────────────────────────────────────────┐\r\n` +
-      `${ansi.frameRow(d, `  ${c}PACKETBBS // YOUR SETTINGS`)}\r\n` +
+      `${ansi.frameRow(d, `  ${c}NODEHOUSE // YOUR SETTINGS`)}\r\n` +
       `${d}    ├──────────────────────────────────────────────────────┤\r\n` +
       `${ansi.frameRow(d, `  ${y}[${w}1${y}]${c} Real Name:    ${w}${String(this.user.real_name || 'Not set').substring(0, 30)}`)}\r\n` +
       `${ansi.frameRow(d, `  ${y}[${w}2${y}]${c} Location:     ${w}${String(this.user.location || 'Not set').substring(0, 30)}`)}\r\n` +
@@ -1262,7 +1262,7 @@ class BBSSession {
 
     const screen = ansi.clear +
       `${d}    ┌──────────────────────────────────────────────────────┐\r\n` +
-      `${ansi.frameRow(d, `  ${c}PACKETBBS // TELECHAT`)}\r\n` +
+      `${ansi.frameRow(d, `  ${c}NODEHOUSE // TELECHAT`)}\r\n` +
       `${d}    ├──────────────────────────────────────────────────────┤\r\n` +
       `${ansi.frameRow(d)}\r\n` +
       `${ansi.frameRow(d, `  ${y}[${w}1${y}]${c} The Lobby           ${g}General chat for everyone`)}\r\n` +
@@ -1376,7 +1376,7 @@ class BBSSession {
 
     let screen = ansi.clear +
       `${d}    ┌──────────────────────────────────────────────────────┐\r\n` +
-      `${ansi.frameRow(d, `  ${c}PACKETBBS // ONE-LINERS`)}\r\n` +
+      `${ansi.frameRow(d, `  ${c}NODEHOUSE // ONE-LINERS`)}\r\n` +
       `${d}    ├──────────────────────────────────────────────────────┤\r\n`;
 
     if (entries.length === 0) {
@@ -1440,7 +1440,7 @@ class BBSSession {
 
     const screen = ansi.clear +
       `${d}    ┌──────────────────────────────────────────────────────┐\r\n` +
-      `${ansi.frameRow(d, `  ${c}PACKETBBS // ELECTRONIC MAIL`)}\r\n` +
+      `${ansi.frameRow(d, `  ${c}NODEHOUSE // ELECTRONIC MAIL`)}\r\n` +
       `${d}    ├──────────────────────────────────────────────────────┤\r\n` +
       `${ansi.frameRow(d, `  ${g}Inbox:${w} ${inbox.length}   ${g}Unread:${w} ${unread}`)}\r\n` +
       `${d}    ├──────────────────────────────────────────────────────┤\r\n` +

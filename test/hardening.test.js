@@ -49,20 +49,20 @@ test('runtime configuration honors Railway and dedicated Telnet ports', () => {
 test('fresh production databases require a strong explicit SysOp password', () => {
   assert.throws(
     () => database.resolveBootstrapSysopPassword({ NODE_ENV: 'production' }),
-    /requires PACKETBBS_SYSOP_PASSWORD/,
+    /requires NODEHOUSE_SYSOP_PASSWORD/,
   );
   assert.throws(
-    () => database.resolveBootstrapSysopPassword({ PACKETBBS_SYSOP_PASSWORD: 'short' }),
+    () => database.resolveBootstrapSysopPassword({ NODEHOUSE_SYSOP_PASSWORD: 'short' }),
     /at least 12 characters/,
   );
   assert.equal(
-    database.resolveBootstrapSysopPassword({ NODE_ENV: 'production', PACKETBBS_SYSOP_PASSWORD: 'correct-horse-battery' }),
+    database.resolveBootstrapSysopPassword({ NODE_ENV: 'production', NODEHOUSE_SYSOP_PASSWORD: 'correct-horse-battery' }),
     'correct-horse-battery',
   );
   assert.equal(database.resolveBootstrapSysopPassword({ NODE_ENV: 'test' }), 'sysop');
   assert.equal(
     database.resolveDatabasePath({ RAILWAY_VOLUME_MOUNT_PATH: '/app/data' }),
-    path.join('/app/data', 'packetbbs.db'),
+    path.join('/app/data', 'nodehouse.db'),
   );
 });
 

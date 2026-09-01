@@ -1,7 +1,8 @@
 {
-  "bbsName": "PacketBBS",
+  "bbsName": "The Nodehouse",
+  "poweredBy": "Nodehouse",
   "sysopName": "SysOp",
-  "sysopEmail": "sysop@packetbbs.local",
+  "sysopEmail": "sysop@nodehouse.local",
   "telnetPort": 2323,
   "webPort": 8088,
   "maxNodes": 16,
@@ -20,7 +21,7 @@
   "fileAreas": [
     { "id": 1, "name": "Utilities", "description": "Useful programs, scripts, and tools", "path": "files/scripts", "accessLevel": 10 },
     { "id": 2, "name": "Text Files & Docs", "description": "Guides, references, and community text files", "path": "files/claudemd", "accessLevel": 10 },
-    { "id": 3, "name": "Community Uploads", "description": "Files contributed by PacketBBS callers", "path": "files/prompts", "accessLevel": 10 },
+    { "id": 3, "name": "Community Uploads", "description": "Files contributed by Nodehouse callers", "path": "files/prompts", "accessLevel": 10 },
     { "id": 4, "name": "ANSI Art", "description": "ANSI art files and packs", "path": "files/ansi", "accessLevel": 10 }
   ]
 }
