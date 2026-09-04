@@ -14,6 +14,7 @@ COPY --from=dependencies --chown=node:node /app/node_modules ./node_modules
 COPY --chown=node:node package.json package-lock.json server.js config.json ./
 COPY --chown=node:node src ./src
 COPY --chown=node:node scripts ./scripts
+COPY --chown=node:node art ./art
 
 RUN mkdir -p /app/data /app/files && chown -R node:node /app/data /app/files
 
