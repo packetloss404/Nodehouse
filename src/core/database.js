@@ -313,6 +313,216 @@ function init() {
   // Additive compatibility for databases created before caller menu modes.
   ensureColumn('users', 'menu_mode', "TEXT NOT NULL DEFAULT 'NOVICE'");
 
+  // Reader continuity and extension tables are deliberately additive. Existing
+  // local message IDs and message_read rows remain the canonical read state.
+  ensureColumn('messages', 'global_id', 'TEXT');
+  ensureColumn('messages', 'root_id', 'INTEGER');
+  ensureColumn('messages', 'author_user_id', 'INTEGER');
+  ensureColumn('messages', 'status', "TEXT NOT NULL DEFAULT 'accepted'");
+  ensureColumn('private_mail', 'kind', "TEXT NOT NULL DEFAULT 'mail'");
+  ensureColumn('private_mail', 'expires_at', 'TEXT');
+
+  db.exec(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_messages_global_id
+      ON messages(global_id) WHERE global_id IS NOT NULL;
+    CREATE INDEX IF NOT EXISTS idx_messages_thread
+      ON messages(base_id, root_id, created_at, id);
+
+    CREATE TABLE IF NOT EXISTS reader_subscriptions (
+      user_id INTEGER NOT NULL,
+      base_id INTEGER NOT NULL,
+      subscribed INTEGER NOT NULL DEFAULT 1 CHECK (subscribed IN (0, 1)),
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      high_water_mark INTEGER NOT NULL DEFAULT 0,
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      PRIMARY KEY (user_id, base_id),
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS reader_preferences (
+      user_id INTEGER PRIMARY KEY,
+      current_base_id INTEGER,
+      signature TEXT NOT NULL DEFAULT '',
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS message_drafts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      base_id INTEGER,
+      to_user TEXT NOT NULL DEFAULT 'All',
+      subject TEXT NOT NULL DEFAULT '',
+      body TEXT NOT NULL DEFAULT '',
+      reply_to INTEGER,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (reply_to) REFERENCES messages(id) ON DELETE SET NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_message_drafts_user
+      ON message_drafts(user_id, updated_at DESC, id DESC);
+
+    CREATE TABLE IF NOT EXISTS user_profiles (
+      user_id INTEGER PRIMARY KEY,
+      display_name TEXT NOT NULL DEFAULT '',
+      bio TEXT NOT NULL DEFAULT '',
+      interests TEXT NOT NULL DEFAULT '',
+      favorite_boards TEXT NOT NULL DEFAULT '',
+      favorite_doors TEXT NOT NULL DEFAULT '',
+      ansi_avatar TEXT NOT NULL DEFAULT '',
+      profile_visible INTEGER NOT NULL DEFAULT 0 CHECK (profile_visible IN (0, 1)),
+      spotlight_opt_in INTEGER NOT NULL DEFAULT 0 CHECK (spotlight_opt_in IN (0, 1)),
+      birthday TEXT,
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS porch_notices (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      author_user_id INTEGER NOT NULL,
+      notice_type TEXT NOT NULL DEFAULT 'notice',
+      title TEXT NOT NULL,
+      body TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'active',
+      pinned INTEGER NOT NULL DEFAULT 0 CHECK (pinned IN (0, 1)),
+      expires_at TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (author_user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_porch_notices_active
+      ON porch_notices(status, pinned DESC, created_at DESC);
+
+    CREATE TABLE IF NOT EXISTS moderation_items (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      target_type TEXT NOT NULL,
+      target_id TEXT NOT NULL,
+      reason TEXT NOT NULL DEFAULT '',
+      state TEXT NOT NULL DEFAULT 'open',
+      reported_by_user_id INTEGER,
+      assigned_to_user_id INTEGER,
+      resolution TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (reported_by_user_id) REFERENCES users(id) ON DELETE SET NULL,
+      FOREIGN KEY (assigned_to_user_id) REFERENCES users(id) ON DELETE SET NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_moderation_items_state
+      ON moderation_items(state, created_at);
+
+    CREATE TABLE IF NOT EXISTS audit_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      actor_user_id INTEGER,
+      action TEXT NOT NULL,
+      target_type TEXT NOT NULL,
+      target_id TEXT,
+      details_json TEXT NOT NULL DEFAULT '{}',
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (actor_user_id) REFERENCES users(id) ON DELETE SET NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_audit_events_created
+      ON audit_events(created_at DESC, id DESC);
+
+    CREATE TABLE IF NOT EXISTS door_saves (
+      user_id INTEGER NOT NULL,
+      door_key TEXT NOT NULL,
+      state_json TEXT NOT NULL DEFAULT '{}',
+      version INTEGER NOT NULL DEFAULT 1,
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      PRIMARY KEY (user_id, door_key),
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS door_usage (
+      user_id INTEGER NOT NULL,
+      door_key TEXT NOT NULL,
+      usage_date TEXT NOT NULL,
+      turns_used INTEGER NOT NULL DEFAULT 0,
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      PRIMARY KEY (user_id, door_key, usage_date),
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS door_runs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      door_key TEXT NOT NULL,
+      season_id INTEGER,
+      score INTEGER NOT NULL DEFAULT 0,
+      result_json TEXT NOT NULL DEFAULT '{}',
+      started_at TEXT NOT NULL DEFAULT (datetime('now')),
+      completed_at TEXT,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_door_runs_leaderboard
+      ON door_runs(door_key, season_id, score DESC);
+
+    CREATE TABLE IF NOT EXISTS door_seasons (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      door_key TEXT NOT NULL,
+      name TEXT NOT NULL,
+      starts_at TEXT NOT NULL,
+      ends_at TEXT NOT NULL,
+      state TEXT NOT NULL DEFAULT 'scheduled',
+      rules_json TEXT NOT NULL DEFAULT '{}',
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_door_seasons_window
+      ON door_seasons(door_key, starts_at, ends_at);
+
+    CREATE TABLE IF NOT EXISTS offline_packets (
+      id TEXT PRIMARY KEY,
+      user_id INTEGER NOT NULL,
+      format TEXT NOT NULL,
+      direction TEXT NOT NULL,
+      state TEXT NOT NULL DEFAULT 'created',
+      content_hash TEXT,
+      message_count INTEGER NOT NULL DEFAULT 0,
+      metadata_json TEXT NOT NULL DEFAULT '{}',
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      consumed_at TEXT,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_offline_packets_user
+      ON offline_packets(user_id, created_at DESC);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_offline_packets_import_hash
+      ON offline_packets(user_id, content_hash)
+      WHERE direction = 'import' AND content_hash IS NOT NULL;
+
+    CREATE TABLE IF NOT EXISTS offline_packet_tokens (
+      token_hash TEXT PRIMARY KEY,
+      packet_id TEXT NOT NULL,
+      user_id INTEGER NOT NULL,
+      purpose TEXT NOT NULL,
+      expires_at TEXT NOT NULL,
+      consumed_at TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (packet_id) REFERENCES offline_packets(id) ON DELETE CASCADE,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS file_transfers (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      purpose TEXT NOT NULL,
+      token_hash TEXT NOT NULL UNIQUE,
+      filename TEXT NOT NULL,
+      mime_type TEXT NOT NULL DEFAULT 'application/octet-stream',
+      size INTEGER NOT NULL DEFAULT 0,
+      expires_at TEXT NOT NULL,
+      consumed_at TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_file_transfers_expiry
+      ON file_transfers(expires_at, consumed_at);
+  `);
+
+  // These caller-card fields arrived after the initial profile migration.
+  ensureColumn('user_profiles', 'favorite_boards', "TEXT NOT NULL DEFAULT ''");
+  ensureColumn('user_profiles', 'favorite_doors', "TEXT NOT NULL DEFAULT ''");
+
   migrateLegacySeedContent();
 
   // Seed default sysop user if no users exist
@@ -372,7 +582,39 @@ function init() {
       '4. Don\'t fight the suggestions - flow with them');
   }
 
+  migrateMessageIdentity();
   return db;
+}
+
+function migrateMessageIdentity() {
+  const missing = db.prepare(`
+    SELECT id, reply_to FROM messages
+    WHERE global_id IS NULL OR root_id IS NULL
+    ORDER BY id
+  `).all();
+  if (missing.length === 0) return;
+
+  const byId = new Map(db.prepare('SELECT id, reply_to, root_id FROM messages').all()
+    .map((message) => [message.id, message]));
+  const rootFor = (message) => {
+    const seen = new Set([message.id]);
+    let cursor = message;
+    while (cursor.reply_to && byId.has(cursor.reply_to) && !seen.has(cursor.reply_to)) {
+      cursor = byId.get(cursor.reply_to);
+      seen.add(cursor.id);
+      if (cursor.root_id) return cursor.root_id;
+    }
+    return cursor.id;
+  };
+  const update = db.prepare(`
+    UPDATE messages SET global_id = COALESCE(global_id, ?), root_id = COALESCE(root_id, ?)
+    WHERE id = ?
+  `);
+  db.transaction(() => {
+    for (const message of missing) {
+      update.run(`nodehouse:local:${message.id}`, rootFor(message), message.id);
+    }
+  })();
 }
 
 function healthCheck() {
@@ -536,11 +778,29 @@ const messages = {
   },
 
   create(baseId, fromUser, toUser, subject, body, replyTo = null) {
-    const result = db.prepare(`
-      INSERT INTO messages (base_id, from_user, to_user, subject, body, reply_to)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `).run(baseId, fromUser, toUser || 'All', subject, body, replyTo);
-    return result.lastInsertRowid;
+    return db.transaction(() => {
+      let rootId = null;
+      if (replyTo !== null && replyTo !== undefined) {
+        const parent = db.prepare('SELECT id, base_id, root_id FROM messages WHERE id = ?').get(replyTo);
+        if (!parent) throw new Error('Reply parent does not exist.');
+        if (Number(parent.base_id) !== Number(baseId)) {
+          throw new Error('Reply parent belongs to a different message base.');
+        }
+        rootId = parent.root_id || parent.id;
+      }
+      const author = db.prepare('SELECT id FROM users WHERE username = ? COLLATE NOCASE').get(fromUser);
+      const result = db.prepare(`
+        INSERT INTO messages
+          (base_id, from_user, to_user, subject, body, reply_to, global_id, root_id, author_user_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        baseId, fromUser, toUser || 'All', subject, body, replyTo,
+        crypto.randomUUID(), rootId, author ? author.id : null
+      );
+      const id = Number(result.lastInsertRowid);
+      if (rootId === null) db.prepare('UPDATE messages SET root_id = ? WHERE id = ?').run(id, id);
+      return result.lastInsertRowid;
+    })();
   },
 
   countByBase(baseId) {
@@ -567,7 +827,7 @@ const messages = {
     `).all(baseId, userId);
   },
 
-  getUnreadByBases(baseIds, userId) {
+  getUnreadByBases(baseIds, userId, limit = 2000) {
     if (!Array.isArray(baseIds) || baseIds.length === 0) return [];
     const placeholders = baseIds.map(() => '?').join(', ');
     return db.prepare(`
@@ -576,8 +836,8 @@ const messages = {
         SELECT 1 FROM message_read mr
         WHERE mr.user_id = ? AND mr.message_id = m.id
       )
-      ORDER BY m.created_at ASC, m.id ASC
-    `).all(...baseIds, userId);
+      ORDER BY m.created_at ASC, m.id ASC LIMIT ?
+    `).all(...baseIds, userId, boundedLimit(limit, 2000, 2000));
   },
 
   countUnreadByBases(baseIds, userId) {
@@ -593,9 +853,72 @@ const messages = {
   },
 
   markRead(messageId, userId) {
-    db.prepare(`
-      INSERT OR IGNORE INTO message_read (user_id, message_id) VALUES (?, ?)
-    `).run(userId, messageId);
+    return db.transaction(() => {
+      const message = db.prepare('SELECT base_id FROM messages WHERE id = ?').get(messageId);
+      if (!message) return false;
+      db.prepare(`
+        INSERT OR IGNORE INTO message_read (user_id, message_id) VALUES (?, ?)
+      `).run(userId, messageId);
+      db.prepare(`
+        INSERT INTO reader_subscriptions (user_id, base_id, subscribed, sort_order, high_water_mark)
+        VALUES (?, ?, 1, ?, ?)
+        ON CONFLICT(user_id, base_id) DO UPDATE SET
+          high_water_mark = MAX(high_water_mark, excluded.high_water_mark),
+          updated_at = datetime('now')
+      `).run(userId, message.base_id, message.base_id, messageId);
+      return true;
+    })();
+  },
+
+  markUnread(messageId, userId) {
+    return db.prepare('DELETE FROM message_read WHERE user_id = ? AND message_id = ?')
+      .run(userId, messageId).changes > 0;
+  },
+
+  catchUp(baseId, userId, throughMessageId = null) {
+    return db.transaction(() => {
+      const max = throughMessageId === null
+        ? db.prepare('SELECT COALESCE(MAX(id), 0) AS id FROM messages WHERE base_id = ?').get(baseId).id
+        : Number(throughMessageId);
+      const result = db.prepare(`
+        INSERT OR IGNORE INTO message_read (user_id, message_id)
+        SELECT ?, id FROM messages WHERE base_id = ? AND id <= ?
+      `).run(userId, baseId, max);
+      db.prepare(`
+        INSERT INTO reader_subscriptions (user_id, base_id, subscribed, sort_order, high_water_mark)
+        VALUES (?, ?, 1, ?, ?)
+        ON CONFLICT(user_id, base_id) DO UPDATE SET
+          high_water_mark = MAX(high_water_mark, excluded.high_water_mark),
+          updated_at = datetime('now')
+      `).run(userId, baseId, baseId, max);
+      return { markedRead: result.changes, highWaterMark: max };
+    })();
+  },
+
+  getThread(messageId) {
+    const message = this.getById(messageId);
+    if (!message) return [];
+    const rootId = message.root_id || message.id;
+    return db.prepare(`
+      SELECT * FROM messages
+      WHERE base_id = ? AND (root_id = ? OR id = ?)
+      ORDER BY created_at, id
+    `).all(message.base_id, rootId, rootId);
+  },
+
+  search(query, baseIds, { limit = 50, offset = 0 } = {}) {
+    if (!Array.isArray(baseIds) || baseIds.length === 0 || !String(query).trim()) return [];
+    const ids = [...new Set(baseIds.map(Number).filter(Number.isInteger))];
+    if (ids.length === 0) return [];
+    const placeholders = ids.map(() => '?').join(', ');
+    const pattern = `%${escapeLike(String(query).trim())}%`;
+    return db.prepare(`
+      SELECT * FROM messages
+      WHERE status = 'accepted' AND base_id IN (${placeholders})
+        AND (subject LIKE ? ESCAPE '\\' OR body LIKE ? ESCAPE '\\'
+          OR from_user LIKE ? ESCAPE '\\')
+      ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?
+    `).all(...ids, pattern, pattern, pattern, boundedLimit(limit), Math.max(0, Number(offset) || 0));
   },
 
   getTotal() {
@@ -606,6 +929,280 @@ const messages = {
     db.prepare('DELETE FROM message_read WHERE message_id = ?').run(id);
     db.prepare('DELETE FROM messages WHERE id = ?').run(id);
   }
+};
+
+function boundedLimit(value, fallback = 50, maximum = 200) {
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed) || parsed < 1) return fallback;
+  return Math.min(parsed, maximum);
+}
+
+function escapeLike(value) {
+  return String(value).replace(/[\\%_]/g, '\\$&');
+}
+
+const readerSubscriptions = {
+  ensure(userId, baseIds) {
+    const ids = [...new Set((baseIds || []).map(Number).filter(Number.isInteger))];
+    const insert = db.prepare(`
+      INSERT OR IGNORE INTO reader_subscriptions
+        (user_id, base_id, subscribed, sort_order, high_water_mark)
+      VALUES (?, ?, 1, ?, 0)
+    `);
+    db.transaction(() => ids.forEach((baseId, index) => insert.run(userId, baseId, index)))();
+    return this.list(userId);
+  },
+
+  list(userId) {
+    return db.prepare(`
+      SELECT * FROM reader_subscriptions WHERE user_id = ?
+      ORDER BY sort_order, base_id
+    `).all(userId);
+  },
+
+  set(userId, baseId, subscribed, sortOrder = null) {
+    const existing = db.prepare(`
+      SELECT sort_order FROM reader_subscriptions WHERE user_id = ? AND base_id = ?
+    `).get(userId, baseId);
+    const order = sortOrder === null ? (existing?.sort_order ?? Number(baseId)) : Number(sortOrder);
+    db.prepare(`
+      INSERT INTO reader_subscriptions (user_id, base_id, subscribed, sort_order)
+      VALUES (?, ?, ?, ?)
+      ON CONFLICT(user_id, base_id) DO UPDATE SET
+        subscribed = excluded.subscribed,
+        sort_order = excluded.sort_order,
+        updated_at = datetime('now')
+    `).run(userId, baseId, subscribed ? 1 : 0, order);
+    return db.prepare('SELECT * FROM reader_subscriptions WHERE user_id = ? AND base_id = ?')
+      .get(userId, baseId);
+  },
+
+  reorder(userId, orderedBaseIds) {
+    const update = db.prepare(`
+      UPDATE reader_subscriptions SET sort_order = ?, updated_at = datetime('now')
+      WHERE user_id = ? AND base_id = ?
+    `);
+    db.transaction(() => orderedBaseIds.forEach((baseId, index) => update.run(index, userId, baseId)))();
+    return this.list(userId);
+  },
+};
+
+const readerPreferences = {
+  get(userId) {
+    return db.prepare('SELECT * FROM reader_preferences WHERE user_id = ?').get(userId) || {
+      user_id: userId, current_base_id: null, signature: '',
+    };
+  },
+
+  setCurrentBase(userId, baseId) {
+    db.prepare(`
+      INSERT INTO reader_preferences (user_id, current_base_id) VALUES (?, ?)
+      ON CONFLICT(user_id) DO UPDATE SET
+        current_base_id = excluded.current_base_id, updated_at = datetime('now')
+    `).run(userId, baseId);
+    return this.get(userId);
+  },
+
+  setSignature(userId, signature) {
+    db.prepare(`
+      INSERT INTO reader_preferences (user_id, signature) VALUES (?, ?)
+      ON CONFLICT(user_id) DO UPDATE SET
+        signature = excluded.signature, updated_at = datetime('now')
+    `).run(userId, signature);
+    return this.get(userId);
+  },
+};
+
+const messageDrafts = {
+  list(userId) {
+    return db.prepare(`
+      SELECT * FROM message_drafts WHERE user_id = ? ORDER BY updated_at DESC, id DESC
+    `).all(userId);
+  },
+
+  get(userId, id) {
+    return db.prepare('SELECT * FROM message_drafts WHERE user_id = ? AND id = ?').get(userId, id);
+  },
+
+  create(userId, draft) {
+    const result = db.prepare(`
+      INSERT INTO message_drafts (user_id, base_id, to_user, subject, body, reply_to)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run(userId, draft.baseId ?? null, draft.toUser || 'All', draft.subject || '', draft.body || '', draft.replyTo ?? null);
+    return this.get(userId, result.lastInsertRowid);
+  },
+
+  update(userId, id, draft) {
+    const result = db.prepare(`
+      UPDATE message_drafts SET base_id = ?, to_user = ?, subject = ?, body = ?, reply_to = ?,
+        updated_at = datetime('now') WHERE user_id = ? AND id = ?
+    `).run(draft.baseId ?? null, draft.toUser || 'All', draft.subject || '', draft.body || '', draft.replyTo ?? null, userId, id);
+    return result.changes ? this.get(userId, id) : null;
+  },
+
+  delete(userId, id) {
+    return db.prepare('DELETE FROM message_drafts WHERE user_id = ? AND id = ?').run(userId, id).changes > 0;
+  },
+
+  trim(userId, keep) {
+    return db.prepare(`
+      DELETE FROM message_drafts WHERE user_id = ? AND id NOT IN (
+        SELECT id FROM message_drafts WHERE user_id = ? ORDER BY updated_at DESC, id DESC LIMIT ?
+      )
+    `).run(userId, userId, keep).changes;
+  },
+};
+
+const communityProfiles = {
+  getByUserId(userId) {
+    return db.prepare(`
+      SELECT p.*, u.username, u.location, u.first_call_date, u.last_call_date, u.total_calls, u.total_posts
+      FROM user_profiles p JOIN users u ON u.id = p.user_id WHERE p.user_id = ?
+    `).get(userId);
+  },
+
+  getByUsername(username, includeHidden = false) {
+    return db.prepare(`
+      SELECT p.*, u.username, u.location, u.first_call_date, u.last_call_date, u.total_calls, u.total_posts
+      FROM user_profiles p JOIN users u ON u.id = p.user_id
+      WHERE u.username = ? COLLATE NOCASE ${includeHidden ? '' : 'AND p.profile_visible = 1'}
+    `).get(username);
+  },
+
+  upsert(userId, fields = {}) {
+    const current = db.prepare('SELECT * FROM user_profiles WHERE user_id = ?').get(userId) || {};
+    const value = (key, fallback = '') => fields[key] === undefined ? (current[key] ?? fallback) : fields[key];
+    db.prepare(`
+      INSERT INTO user_profiles
+        (user_id, display_name, bio, interests, favorite_boards, favorite_doors,
+         ansi_avatar, profile_visible, spotlight_opt_in, birthday)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(user_id) DO UPDATE SET
+        display_name = excluded.display_name, bio = excluded.bio, interests = excluded.interests,
+        favorite_boards = excluded.favorite_boards, favorite_doors = excluded.favorite_doors,
+        ansi_avatar = excluded.ansi_avatar, profile_visible = excluded.profile_visible,
+        spotlight_opt_in = excluded.spotlight_opt_in, birthday = excluded.birthday,
+        updated_at = datetime('now')
+    `).run(
+      userId, value('display_name'), value('bio'), value('interests'),
+      value('favorite_boards'), value('favorite_doors'), value('ansi_avatar'),
+      value('profile_visible', 0) ? 1 : 0, value('spotlight_opt_in', 0) ? 1 : 0,
+      value('birthday', null)
+    );
+    return this.getByUserId(userId);
+  },
+
+  listVisible({ search = '', limit = 50, offset = 0 } = {}) {
+    const pattern = `%${escapeLike(search)}%`;
+    return db.prepare(`
+      SELECT p.*, u.username, u.location, u.first_call_date, u.last_call_date, u.total_calls, u.total_posts
+      FROM user_profiles p JOIN users u ON u.id = p.user_id
+      WHERE p.profile_visible = 1 AND
+        (u.username LIKE ? ESCAPE '\\' OR p.display_name LIKE ? ESCAPE '\\' OR
+         p.bio LIKE ? ESCAPE '\\' OR p.interests LIKE ? ESCAPE '\\')
+      ORDER BY COALESCE(u.last_call_date, u.first_call_date) DESC, u.username
+      LIMIT ? OFFSET ?
+    `).all(pattern, pattern, pattern, pattern, boundedLimit(limit), Math.max(0, Number(offset) || 0));
+  },
+
+  listAll({ search = '', limit = 50, offset = 0 } = {}) {
+    const pattern = `%${escapeLike(search)}%`;
+    return db.prepare(`
+      SELECT p.*, u.username, u.location, u.first_call_date, u.last_call_date, u.total_calls, u.total_posts
+      FROM user_profiles p JOIN users u ON u.id = p.user_id
+      WHERE u.username LIKE ? ESCAPE '\\' OR p.display_name LIKE ? ESCAPE '\\'
+        OR p.bio LIKE ? ESCAPE '\\' OR p.interests LIKE ? ESCAPE '\\'
+      ORDER BY p.profile_visible DESC, COALESCE(u.last_call_date, u.first_call_date) DESC, u.username
+      LIMIT ? OFFSET ?
+    `).all(pattern, pattern, pattern, pattern, boundedLimit(limit), Math.max(0, Number(offset) || 0));
+  },
+};
+
+const porchPosts = {
+  create(authorUserId, { type = 'notice', title, body, expiresAt = null, pinned = false } = {}) {
+    const allowedTypes = new Set(['notice', 'event', 'classified', 'help_wanted', 'auto_message']);
+    if (!allowedTypes.has(type)) throw new Error('Unsupported porch notice type.');
+    const result = db.prepare(`
+      INSERT INTO porch_notices (author_user_id, notice_type, title, body, expires_at, pinned)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run(authorUserId, type, title, body, expiresAt, pinned ? 1 : 0);
+    return this.getById(result.lastInsertRowid);
+  },
+
+  list({ type = null, includeInactive = false, limit = 50, offset = 0 } = {}) {
+    return db.prepare(`
+      SELECT n.*, u.username AS author_username FROM porch_notices n
+      JOIN users u ON u.id = n.author_user_id
+      WHERE (? IS NULL OR n.notice_type = ?)
+        AND (? = 1 OR (n.status = 'active' AND (n.expires_at IS NULL OR n.expires_at > datetime('now'))))
+      ORDER BY n.pinned DESC, n.created_at DESC, n.id DESC LIMIT ? OFFSET ?
+    `).all(type, type, includeInactive ? 1 : 0, boundedLimit(limit), Math.max(0, Number(offset) || 0));
+  },
+
+  getById(id) {
+    return db.prepare(`
+      SELECT n.*, u.username AS author_username FROM porch_notices n
+      JOIN users u ON u.id = n.author_user_id WHERE n.id = ?
+    `).get(id);
+  },
+
+  moderate(id, { status, pinned } = {}) {
+    const current = this.getById(id);
+    if (!current) return null;
+    db.prepare(`
+      UPDATE porch_notices SET status = ?, pinned = ?, updated_at = datetime('now') WHERE id = ?
+    `).run(status ?? current.status, pinned === undefined ? current.pinned : (pinned ? 1 : 0), id);
+    return this.getById(id);
+  },
+
+  remove(id) {
+    return db.prepare(`
+      UPDATE porch_notices SET status = 'removed', updated_at = datetime('now') WHERE id = ?
+    `).run(id).changes > 0;
+  },
+};
+
+const moderationQueue = {
+  create({ targetType, targetId, reason = '', reportedByUserId = null } = {}) {
+    const result = db.prepare(`
+      INSERT INTO moderation_items (target_type, target_id, reason, reported_by_user_id)
+      VALUES (?, ?, ?, ?)
+    `).run(targetType, String(targetId), reason, reportedByUserId);
+    return db.prepare('SELECT * FROM moderation_items WHERE id = ?').get(result.lastInsertRowid);
+  },
+  list({ state = 'open', limit = 50 } = {}) {
+    return db.prepare(`
+      SELECT * FROM moderation_items WHERE (? IS NULL OR state = ?)
+      ORDER BY created_at, id LIMIT ?
+    `).all(state, state, boundedLimit(limit));
+  },
+  update(id, { state, assignedToUserId, resolution } = {}) {
+    const item = db.prepare('SELECT * FROM moderation_items WHERE id = ?').get(id);
+    if (!item) return null;
+    db.prepare(`
+      UPDATE moderation_items SET state = ?, assigned_to_user_id = ?, resolution = ?,
+        updated_at = datetime('now') WHERE id = ?
+    `).run(state ?? item.state, assignedToUserId ?? item.assigned_to_user_id,
+      resolution ?? item.resolution, id);
+    return db.prepare('SELECT * FROM moderation_items WHERE id = ?').get(id);
+  },
+};
+
+const auditLog = {
+  record({ actorUserId = null, action, targetType, targetId = null, details = {} } = {}) {
+    const json = JSON.stringify(details);
+    if (Buffer.byteLength(json) > 32768) throw new Error('Audit details are too large.');
+    return db.prepare(`
+      INSERT INTO audit_events (actor_user_id, action, target_type, target_id, details_json)
+      VALUES (?, ?, ?, ?, ?)
+    `).run(actorUserId, action, targetType, targetId === null ? null : String(targetId), json).lastInsertRowid;
+  },
+  list({ action = null, targetType = null, limit = 100 } = {}) {
+    return db.prepare(`
+      SELECT * FROM audit_events WHERE (? IS NULL OR action = ?) AND (? IS NULL OR target_type = ?)
+      ORDER BY created_at DESC, id DESC LIMIT ?
+    `).all(action, action, targetType, targetType, boundedLimit(limit, 100, 500));
+  },
 };
 
 // Bulletin operations
@@ -712,8 +1309,9 @@ const graffiti = {
 
 // Private mail operations
 const privateMail = {
-  getInbox(username) {
-    return db.prepare('SELECT * FROM private_mail WHERE to_user = ? COLLATE NOCASE ORDER BY created_at DESC').all(username);
+  getInbox(username, limit = 1000) {
+    return db.prepare('SELECT * FROM private_mail WHERE to_user = ? COLLATE NOCASE ORDER BY created_at DESC LIMIT ?')
+      .all(username, boundedLimit(limit, 1000, 1000));
   },
 
   getSent(username) {
@@ -724,8 +1322,18 @@ const privateMail = {
     return db.prepare('SELECT * FROM private_mail WHERE id = ?').get(id);
   },
 
-  send(fromUser, toUser, subject, body) {
-    return db.prepare('INSERT INTO private_mail (from_user, to_user, subject, body) VALUES (?, ?, ?, ?)').run(fromUser, toUser, subject, body);
+  send(fromUser, toUser, subject, body, options = {}) {
+    const kind = options.kind === 'telegram' ? 'telegram' : 'mail';
+    return db.prepare(`
+      INSERT INTO private_mail (from_user, to_user, subject, body, kind, expires_at)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run(fromUser, toUser, subject, body, kind, options.expiresAt || null);
+  },
+
+  sendTelegram(fromUser, toUser, body, options = {}) {
+    return this.send(fromUser, toUser, options.subject || 'Telegram', body, {
+      kind: 'telegram', expiresAt: options.expiresAt || null,
+    });
   },
 
   markRead(id) {
@@ -889,12 +1497,241 @@ const dungeon = {
   }
 };
 
+function boundedJson(value, maximumBytes = 65536) {
+  const json = JSON.stringify(value ?? {});
+  if (Buffer.byteLength(json) > maximumBytes) throw new Error('Stored state is too large.');
+  return json;
+}
+
+const doors = {
+  getSave(userId, doorId) {
+    const row = db.prepare('SELECT * FROM door_saves WHERE user_id = ? AND door_key = ?')
+      .get(userId, String(doorId));
+    if (!row) return null;
+    return { ...row, state: JSON.parse(row.state_json) };
+  },
+
+  save(userId, doorId, state, version = 1) {
+    db.prepare(`
+      INSERT INTO door_saves (user_id, door_key, state_json, version)
+      VALUES (?, ?, ?, ?)
+      ON CONFLICT(user_id, door_key) DO UPDATE SET
+        state_json = excluded.state_json, version = excluded.version, updated_at = datetime('now')
+    `).run(userId, String(doorId), boundedJson(state), Math.max(1, Number(version) || 1));
+    return this.getSave(userId, doorId);
+  },
+
+  beginRun(userId, doorId, dailyLimit = 1) {
+    const limit = Math.max(1, Math.min(Number(dailyLimit) || 1, 10000));
+    const key = String(doorId);
+    return db.transaction(() => {
+      const date = db.prepare("SELECT date('now') AS date").get().date;
+      db.prepare(`
+        INSERT OR IGNORE INTO door_usage (user_id, door_key, usage_date) VALUES (?, ?, ?)
+      `).run(userId, key, date);
+      const usage = db.prepare(`
+        SELECT turns_used FROM door_usage WHERE user_id = ? AND door_key = ? AND usage_date = ?
+      `).get(userId, key, date);
+      if (usage.turns_used >= limit) return { allowed: false, remaining: 0, runId: null };
+      db.prepare(`
+        UPDATE door_usage SET turns_used = turns_used + 1, updated_at = datetime('now')
+        WHERE user_id = ? AND door_key = ? AND usage_date = ?
+      `).run(userId, key, date);
+      const season = db.prepare(`
+        SELECT id FROM door_seasons WHERE door_key = ? AND state = 'active'
+          AND starts_at <= datetime('now') AND ends_at > datetime('now')
+        ORDER BY starts_at DESC LIMIT 1
+      `).get(key);
+      const runId = db.prepare(`
+        INSERT INTO door_runs (user_id, door_key, season_id) VALUES (?, ?, ?)
+      `).run(userId, key, season ? season.id : null).lastInsertRowid;
+      return { allowed: true, remaining: limit - usage.turns_used - 1, runId };
+    })();
+  },
+
+  finishRun(runId, score, result = {}) {
+    const json = boundedJson(result, 32768);
+    const changes = db.prepare(`
+      UPDATE door_runs SET score = ?, result_json = ?, completed_at = datetime('now')
+      WHERE id = ? AND completed_at IS NULL
+    `).run(Number(score) || 0, json, runId).changes;
+    return changes ? db.prepare('SELECT * FROM door_runs WHERE id = ?').get(runId) : null;
+  },
+
+  getLeaderboard(doorId, limit = 10, period = 'all') {
+    const since = period === 'day' ? "datetime('now', '-1 day')"
+      : period === 'week' ? "datetime('now', '-7 days')"
+        : period === 'month' ? "datetime('now', '-1 month')" : null;
+    return db.prepare(`
+      SELECT r.user_id, u.username, MAX(r.score) AS score, COUNT(*) AS runs
+      FROM door_runs r JOIN users u ON u.id = r.user_id
+      WHERE r.door_key = ? AND r.completed_at IS NOT NULL
+        ${since ? `AND r.completed_at >= ${since}` : ''}
+      GROUP BY r.user_id, u.username ORDER BY score DESC, r.completed_at ASC LIMIT ?
+    `).all(String(doorId), boundedLimit(limit, 10, 100));
+  },
+
+  createSeason(doorId, { name, startsAt, endsAt, state = 'scheduled', rules = {} }) {
+    const result = db.prepare(`
+      INSERT INTO door_seasons (door_key, name, starts_at, ends_at, state, rules_json)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run(String(doorId), name, startsAt, endsAt, state, boundedJson(rules, 32768));
+    return db.prepare('SELECT * FROM door_seasons WHERE id = ?').get(result.lastInsertRowid);
+  },
+};
+
+const transfers = {
+  create(userId, purpose, tokenHash, filename, mime, size, expiresAt) {
+    const result = db.prepare(`
+      INSERT INTO file_transfers
+        (user_id, purpose, token_hash, filename, mime_type, size, expires_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run(userId, purpose, tokenHash, filename, mime || 'application/octet-stream',
+      Math.max(0, Number(size) || 0), expiresAt);
+    return db.prepare('SELECT * FROM file_transfers WHERE id = ?').get(result.lastInsertRowid);
+  },
+  get(tokenHash, purpose) {
+    return db.prepare(`
+      SELECT * FROM file_transfers WHERE token_hash = ? AND purpose = ?
+        AND consumed_at IS NULL AND expires_at > datetime('now')
+    `).get(tokenHash, purpose) || null;
+  },
+  countActive(userId, purpose) {
+    return db.prepare(`
+      SELECT COUNT(*) AS count FROM file_transfers
+      WHERE user_id = ? AND purpose = ? AND consumed_at IS NULL AND expires_at > datetime('now')
+    `).get(userId, purpose).count;
+  },
+  countRecent(userId, purposePrefix, minutes = 15) {
+    const windowMinutes = Math.max(1, Math.min(Number(minutes) || 15, 1440));
+    return db.prepare(`
+      SELECT COUNT(*) AS count FROM file_transfers
+      WHERE user_id = ? AND purpose LIKE ? AND created_at >= datetime('now', ?)
+    `).get(userId, `${purposePrefix}%`, `-${windowMinutes} minutes`).count;
+  },
+  consume(tokenHash, purpose) {
+    return db.transaction(() => {
+      const row = db.prepare(`
+        SELECT * FROM file_transfers WHERE token_hash = ? AND purpose = ?
+          AND consumed_at IS NULL AND expires_at > datetime('now')
+      `).get(tokenHash, purpose);
+      if (!row) return null;
+      const changed = db.prepare(`
+        UPDATE file_transfers SET consumed_at = datetime('now')
+        WHERE id = ? AND consumed_at IS NULL
+      `).run(row.id).changes;
+      return changed ? { ...row, consumed_at: db.prepare("SELECT datetime('now') AS now").get().now } : null;
+    })();
+  },
+  revokeExpired() {
+    return db.prepare(`
+      UPDATE file_transfers SET consumed_at = COALESCE(consumed_at, datetime('now'))
+      WHERE consumed_at IS NULL AND expires_at <= datetime('now')
+    `).run().changes;
+  },
+  pruneStale(days = 7) {
+    const keepDays = Math.max(1, Math.min(Number(days) || 7, 90));
+    return db.prepare(`
+      DELETE FROM file_transfers
+      WHERE (consumed_at IS NOT NULL AND consumed_at < datetime('now', ?))
+         OR expires_at < datetime('now', ?)
+    `).run(`-${keepDays} days`, `-${keepDays} days`).changes;
+  },
+};
+
+const offlinePackets = {
+  create({ id = crypto.randomUUID(), userId, format = 'briefcase', direction = 'export',
+    state = 'created', contentHash = null, messageCount = 0, metadata = {} } = {}) {
+    db.prepare(`
+      INSERT INTO offline_packets
+        (id, user_id, format, direction, state, content_hash, message_count, metadata_json)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(id, userId, format, direction, state, contentHash, messageCount, boundedJson(metadata, 32768));
+    return this.get(id, userId);
+  },
+  get(id, userId = null) {
+    return db.prepare('SELECT * FROM offline_packets WHERE id = ? AND (? IS NULL OR user_id = ?)')
+      .get(id, userId, userId);
+  },
+  list(userId, limit = 20) {
+    return db.prepare(`SELECT * FROM offline_packets WHERE user_id = ? ORDER BY created_at DESC LIMIT ?`)
+      .all(userId, boundedLimit(limit, 20, 100));
+  },
+  findImportedHash(userId, contentHash) {
+    return db.prepare(`
+      SELECT * FROM offline_packets
+      WHERE user_id = ? AND direction = 'import' AND content_hash = ?
+      ORDER BY created_at DESC LIMIT 1
+    `).get(userId, contentHash) || null;
+  },
+  findByTransferId(userId, transferId) {
+    const row = db.prepare(`
+      SELECT * FROM offline_packets
+      WHERE user_id = ? AND json_extract(metadata_json, '$.transferId') = ?
+      ORDER BY created_at DESC LIMIT 1
+    `).get(userId, Number(transferId));
+    if (!row) return null;
+    return { ...row, metadata: JSON.parse(row.metadata_json) };
+  },
+  markConsumed(id, userId) {
+    return db.prepare(`
+      UPDATE offline_packets SET state = 'consumed', consumed_at = datetime('now')
+      WHERE id = ? AND user_id = ? AND consumed_at IS NULL
+    `).run(id, userId).changes > 0;
+  },
+  issueToken(packetId, userId, purpose, tokenHash, expiresAt) {
+    db.prepare(`
+      INSERT INTO offline_packet_tokens (token_hash, packet_id, user_id, purpose, expires_at)
+      VALUES (?, ?, ?, ?, ?)
+    `).run(tokenHash, packetId, userId, purpose, expiresAt);
+    return { packetId, userId, purpose, expiresAt };
+  },
+  consumeToken(tokenHash, purpose) {
+    return db.transaction(() => {
+      const token = db.prepare(`
+        SELECT * FROM offline_packet_tokens WHERE token_hash = ? AND purpose = ?
+          AND consumed_at IS NULL AND expires_at > datetime('now')
+      `).get(tokenHash, purpose);
+      if (!token) return null;
+      const changed = db.prepare(`
+        UPDATE offline_packet_tokens SET consumed_at = datetime('now')
+        WHERE token_hash = ? AND consumed_at IS NULL
+      `).run(tokenHash).changes;
+      return changed ? token : null;
+    })();
+  },
+  importReplies({ userId, username, format, contentHash, replies, metadata = {} } = {}) {
+    return db.transaction(() => {
+      const packet = this.create({
+        userId, format, direction: 'import', contentHash,
+        messageCount: replies.length, metadata,
+      });
+      for (const reply of replies) {
+        messages.create(reply.baseId, username, 'All', reply.subject, reply.body, reply.replyTo ?? null);
+      }
+      if (replies.length > 0) {
+        db.prepare('UPDATE users SET total_posts = total_posts + ? WHERE id = ?')
+          .run(replies.length, userId);
+      }
+      this.markConsumed(packet.id, userId);
+      return { packet: this.get(packet.id, userId), imported: replies.length };
+    })();
+  },
+};
+
 module.exports = {
   init,
   close,
   healthCheck,
   users,
   messages,
+  readerSubscriptions,
+  readerPreferences,
+  messageDrafts,
+  communityProfiles,
+  porchPosts,
+  moderationQueue,
+  auditLog,
   bulletins,
   callLog,
   files,
@@ -903,6 +1740,9 @@ module.exports = {
   polls,
   motd,
   dungeon,
+  doors,
+  transfers,
+  offlinePackets,
   hashPassword,
   verifyPassword,
   resolveBootstrapSysopPassword,

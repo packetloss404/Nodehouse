@@ -3,7 +3,7 @@ const net = require('net');
 const BBSSession = require('../core/bbs');
 const { FixedWindowLimiter, getSocketAddress } = require('./guardrails');
 
-function createTelnetServer(nodeManager, config) {
+function createTelnetServer(nodeManager, config, services = {}) {
   const connectionLimiter = new FixedWindowLimiter({ max: 30, windowMs: 60 * 1000 });
   const loginFailureLimiter = new FixedWindowLimiter({ max: 12, windowMs: 15 * 60 * 1000 });
   const registrationLimiter = new FixedWindowLimiter({ max: 3, windowMs: 60 * 60 * 1000 });
@@ -39,6 +39,7 @@ function createTelnetServer(nodeManager, config) {
     };
 
     const session = new BBSSession(transport, nodeNum, nodeManager, {
+      ...services,
       recordLoginFailure() {
         return loginFailureLimiter.consume(connectionKey).allowed;
       },

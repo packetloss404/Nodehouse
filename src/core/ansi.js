@@ -237,7 +237,10 @@ ansi.art.mainMenu = (status = {}) => {
     framedRow(d, `  ${y}[${w}W${y}]${c} Who's Online         ${y}[${w}V${y}]${c} Voting Booth`),
     framedRow(d, `  ${y}[${w}O${y}]${c} One-Liners           ${y}[${w}Y${y}]${c} Your Settings`),
     framedRow(d, `  ${y}[${w}P${y}]${c} Page SysOp           ${y}[${w}S${y}]${c} System Information`),
-    framedRow(d, `  ${y}[${w}X${y}]${c} Menu Mode            ${y}[${w}G${y}]${c} Goodbye / Logoff`),
+    framedRow(d, `  ${y}[${w}H${y}]${c} Front Porch          ${y}[${w}I${y}]${c} Node Pages`),
+    framedRow(d, `  ${y}[${w}A${y}]${c} ANSI Art Gallery     ${y}[${w}K${y}]${c} Packet Briefcase`),
+    framedRow(d, `  ${y}[${w}Z${y}]${c} Daily Call           ${y}[${w}X${y}]${c} Menu Mode`),
+    framedRow(d, `  ${y}[${w}G${y}]${c} Goodbye / Logoff`),
   ];
 
   return ansi.clear + `${d}    ┌──────────────────────────────────────────────────────┐\r\n` +
@@ -254,7 +257,7 @@ ansi.art.mainPrompt = (status = {}, terse = false) => {
   const r = ansi.reset;
 
   if (terse) return `${c}    Main>${w} `;
-  return `${d}    Main ${y}[${w}M E F D B T N L W V O Y P S X G ?${y}] ` +
+  return `${d}    Main ${y}[${w}M E F D B T N L W V O Y P H I A K Z S X G ?${y}] ` +
     `${g}Mail:${w}${status.unreadMail || 0} ${g}New:${w}${status.unreadMessages || 0}${r}\r\n` +
     `${c}    Main>${w} `;
 };
@@ -322,7 +325,7 @@ ansi.art.messageBases = (bases) => {
   }
 
   screen += `${d}    ├──────────────────────────────────────────────────────┤\r\n`;
-  screen += `${framedRow(d, `  ${y}[${w}#${y}]${c} Select   ${y}[${w}N${y}]${c} Newscan all   ${y}[${w}Q${y}]${c} Main Menu`)}\r\n`;
+  screen += `${framedRow(d, `  ${y}[${w}#${y}]${c} Go ${y}[${w}C${y}]${c} Continue ${y}[${w}N${y}]${c} Newscan ${y}[${w}R${y}]${c} Setup ${y}[${w}Q${y}]${c} Main`)}\r\n`;
   screen += `${d}    └──────────────────────────────────────────────────────┘\r\n${r}\r\n`;
   return screen;
 };
@@ -344,7 +347,7 @@ ansi.art.messageRead = (msg) => {
     `${d}    ├──────────────────────────────────────────────────────┤`,
     ...bodyRows,
     `${d}    ├──────────────────────────────────────────────────────┤`,
-    framedRow(d, ` ${y}[${w}F${y}]${c}ollow-up ${y}[${w}R${y}]${c}eply mail ${y}[${w}N${y}]${c}ext ${y}[${w}P${y}]${c}rev ${y}[${w}Q${y}]${c}uit`),
+    framedRow(d, ` ${y}[${w}F${y}]${c}ollow ${y}[${w}R${y}]${c}mail ${y}[${w}T${y}]${c}hread ${y}[${w}U${y}]${c}new ${y}[${w}N${y}]${c}ext ${y}[${w}P${y}]${c}rev ${y}[${w}Q${y}]${c}uit`),
   ];
 
   return `${d}    ┌──────────────────────────────────────────────────────┐\r\n` +
