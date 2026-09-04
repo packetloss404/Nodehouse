@@ -1,8 +1,8 @@
 # The Nodehouse Community and Network Handoff
 
-**Prepared:** 2026-07-30; implementation status updated 2026-08-01
+**Prepared:** 2026-07-30; implementation status updated 2026-09-04
 
-**Status:** The traditional caller-shell milestone is implemented. Reader continuity, offline packets, networking, and compatibility sections remain proposals for review.
+**Status:** The local community release is implemented: reader continuity, Daily Call, caller cards/Front Porch, control desk, node pages/telegrams, persistent door leagues, offline packets, and an ANSI gallery. PacketNet federation remains backlog-only and has not been deployed.
 
 **Scope:** Product direction, historical BBS research, technical architecture, migration guardrails, and a phased implementation plan
 
@@ -240,6 +240,13 @@ The current code already provides:
 - Five door games
 - File-area metadata
 - A web SysOp panel
+- Personal conference subscriptions/order, remembered conference, catch-up, mark-unread, stable thread identity/view, and literal access-scoped search
+- A guided Daily Call spanning mail, subscribed conferences, bulletins, new files, callers, and polls
+- Private-by-default caller cards, a moderated Front Porch, role-separated control desk, moderation queue, and audit trail
+- Caller presence states, consent-based pages/private node chat, and durable telegram fallback
+- Generalized bounded door saves, daily admission, completed-run scores, league tables, and season-ready storage
+- Packet Briefcase and QWK/REP export/import through expiring one-use browser transfers with defensive ZIP handling and replay protection
+- A curated, bounded 80-column ANSI gallery with SAUCE metadata parsing and terminal-control filtering
 - SQLite persistence
 
 The rename work preserves stable message-base IDs and existing `data/packetbbs.db` and `data/vibebbs.db` installations while using `data/nodehouse.db` for new installations.
@@ -248,11 +255,11 @@ The research and exact implementation boundary for this milestone are recorded i
 
 ### Known architectural gaps
 
-- Reader state is per-message only; subscriptions, scan order, high-water pointers, catch-up, and explicit mark-unread are not implemented.
-- `messages` uses a local integer ID, username strings, and one local `reply_to` pointer.
+- The terminal editor can save drafts, apply compact signatures, and seed follow-ups with bounded quotes; browsing/resuming saved drafts and selecting quote line ranges remain follow-up UX.
+- `messages` now has stable global/root identity and validated local parents, but still retains username strings and a single local publication per row.
 - `private_mail` has one recipient, one shared read flag, and no durable sent/delivery/thread state.
 - Message-base definitions live in `config.json` rather than the database.
-- File areas are metadata-only; upload and download transfer are not implemented.
+- File areas are metadata-only; general library upload and download are not implemented. The HTTP transfer path currently serves offline packet files only.
 - The session state machine will become difficult to extend if all new reader, mail, file, and network states stay in one class.
 
 ## Recommended data model
@@ -377,29 +384,31 @@ Likely modules:
 - [x] Distinguish public follow-up from private reply
 - [x] Add Last Callers
 - [x] Add persistent novice/expert/super menu modes
-- Add subscribed-area scans
-- Add per-area cursor/high-water state
-- Add next unread, catch up, and mark unread
-- Add quoted replies, signatures, and compact profiles
+- [x] Add subscribed-area scans and caller-controlled order
+- [x] Add per-area cursor/high-water metadata while retaining authoritative per-message read state
+- [x] Add next-unread services, catch up, and mark unread
+- [x] Add stable thread view and access-scoped message search
+- [x] Add bounded quote/signature/draft services and compact private-by-default profiles
 
-**Current result:** a caller can log in, see what changed, read only unread material, and choose a public or private response. The phase remains open until conference subscriptions and durable per-conference position are implemented.
+**Current result:** a caller can log in, take a guided Daily Call, scan only subscribed conferences in a chosen order, resume a conference, inspect a thread, search, catch up, mark unread, save a draft, use a compact signature, quote a post, and choose a public or private response. Browsing/resuming drafts and selecting quote ranges remain follow-up work.
 
 ### Phase 2 — Message and E-Mail foundation
 
-- Add stable global IDs without changing existing local display IDs
+- [x] Add stable global IDs without changing existing local display IDs
 - Add database-backed areas while preserving current numeric IDs
-- Add parent/reference metadata and thread views
+- [x] Add root/parent metadata and thread views
 - Add Inbox/Sent/Saved/Drafts
 - Add multiple recipients, CC, reply chains, and receipts
-- Add conference charters, moderation queues, and bounded personal filters
+- [x] Add a community moderation queue and audit history
+- Add database-backed conference charters and bounded personal filters
 
 **Exit condition:** local behavior is expressive enough to map cleanly to QWK, FTN, and Netnews without protocol-specific storage hacks.
 
 ### Phase 3 — Offline packets and file libraries
 
-- Packet Briefcase export/import
-- QWK download and REP import
-- Replay protection and defensive archive handling
+- [x] Packet Briefcase export/import
+- [x] QWK download and REP import
+- [x] Replay protection, atomic reply import, expiring one-use transfers, and defensive archive handling
 - New-file scans and search
 - Extended descriptions and `FILE_ID.DIZ` extraction
 - Batch ZIP downloads
@@ -492,10 +501,10 @@ Do not block ordinary community participation behind upload ratios, download cre
 Current decisions and remaining approvals:
 
 - [x] “Vibe Community” is the implemented section name.
-- [ ] PacketNet is the preferred native-network name.
+- [x] PacketNet is the preferred native-network name; implementation remains backlog-only.
 - [x] The first build target began with Caller Loop + Newscan and preserved the existing E-Mail path.
-- [ ] Packet Briefcase should precede or ship alongside classic QWK.
-- [ ] The first PacketNet topology will be a trusted hub and controlled test nodes.
+- [x] Packet Briefcase ships alongside classic QWK/REP support.
+- [x] The planned first PacketNet topology is a trusted hub and controlled test nodes; no peers are implemented yet.
 - [ ] External NNTP groups begin read-only and allowlisted.
 - [ ] Internet email remains out of scope until separately approved.
 - [x] Stable current message-base IDs and legacy database fallback are preserved.
@@ -517,4 +526,4 @@ Current decisions and remaining approvals:
 
 ## Recommended next implementation
 
-Continue with **Reader Continuity**: subscriptions and scan ordering, high-water pointers, catch-up/mark-unread, remembered current conference, selected quoting, signatures, and search. That closes the remaining Phase 1 gap before the local E-Mail schema, offline packets, or external networking expand the system.
+Continue with **File-Library Completion and Editor UX**: add saved-draft browsing/resume and selectable quote ranges, then build curated file upload/download, search, descriptions, quarantine, and approval. Keep PacketNet in the backlog until offline-packet replay handling, moderation, and operational recovery have been exercised in production-like use.

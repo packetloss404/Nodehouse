@@ -15,6 +15,8 @@ const NodeManager = require('./src/server/node-manager');
 const { createTelnetServer } = require('./src/server/telnet');
 const { createWebSocketServer } = require('./src/server/websocket');
 const { setupAdminPanel } = require('./src/admin/panel');
+const { PacketService } = require('./src/services/packet-service');
+const { setupTransferRoutes } = require('./src/server/transfers');
 const { resolveRuntimeConfig } = require('./src/server/runtime-config');
 
 const runtime = resolveRuntimeConfig(config);
@@ -34,6 +36,14 @@ db.init();
 
 // Create node manager
 const nodeManager = new NodeManager(config.maxNodes);
+nodeManager.setTelegramSender((fromUser, toUser, message) => {
+  const recipient = db.users.findByUsername(toUser);
+  if (!recipient) return false;
+  return db.privateMail.sendTelegram(fromUser, recipient.username, message);
+});
+const packetService = new PacketService({ database: db, config });
+const packetCleanupInterval = setInterval(() => packetService.cleanup(), 5 * 60 * 1000);
+packetCleanupInterval.unref();
 const startTime = Date.now();
 
 // ─── Express app (serves web terminal + admin panel) ────
@@ -67,15 +77,16 @@ app.get('/', (req, res) => {
 
 // Setup admin panel routes
 setupAdminPanel(app, nodeManager, config);
+setupTransferRoutes(app, packetService);
 
 // ─── HTTP server (for WebSocket upgrade + web terminal) ──
 const httpServer = http.createServer(app);
 
 // ─── WebSocket server ────────────────────────────────────
-const webSocketServer = createWebSocketServer(httpServer, nodeManager, config);
+const webSocketServer = createWebSocketServer(httpServer, nodeManager, config, { packetService });
 
 // ─── Telnet server ───────────────────────────────────────
-const telnetServer = createTelnetServer(nodeManager, config);
+const telnetServer = createTelnetServer(nodeManager, config, { packetService });
 
 // ─── Start everything ────────────────────────────────────
 telnetServer.listen(runtime.telnetPort, runtime.host, () => {
@@ -115,6 +126,7 @@ let shuttingDown = false;
 function shutdown() {
   if (shuttingDown) return;
   shuttingDown = true;
+  clearInterval(packetCleanupInterval);
   console.log(`\n  Shutting down ${config.bbsName}...`);
 
   for (const client of webSocketServer.clients) client.terminate();

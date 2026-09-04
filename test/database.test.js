@@ -47,7 +47,7 @@ test('database override, fresh content, and exact-match rename migration are saf
 
   const db = database.init();
   const bulletin = db.prepare('SELECT title, body FROM bulletins LIMIT 1').get();
-  const message = db.prepare('SELECT subject, body FROM messages WHERE base_id = 1 LIMIT 1').get();
+  const message = db.prepare('SELECT id, subject, body, global_id, root_id FROM messages WHERE base_id = 1 LIMIT 1').get();
   const userColumns = db.prepare('PRAGMA table_info(users)').all().map((column) => column.name);
 
   assert.equal(bulletin.title, 'Welcome to The Nodehouse!');
@@ -55,11 +55,18 @@ test('database override, fresh content, and exact-match rename migration are saf
   assert.match(bulletin.body, /Vibe Community/);
   assert.equal(message.subject, 'Welcome to The Nodehouse!');
   assert.doesNotMatch(message.body, /VibeBBS/);
+  assert.match(message.global_id, /^(nodehouse:local:|[0-9a-f-]{36})/);
+  assert.equal(message.root_id, message.id);
   assert.ok(userColumns.includes('menu_mode'));
-  assert.equal(
-    db.prepare("SELECT COUNT(*) AS count FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'").get().count,
-    14
-  );
+  const tables = new Set(db.prepare(
+    "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'"
+  ).all().map((row) => row.name));
+  for (const required of ['users', 'messages', 'message_read', 'reader_subscriptions',
+    'reader_preferences', 'message_drafts', 'user_profiles', 'porch_notices',
+    'moderation_items', 'audit_events', 'door_saves', 'door_runs', 'door_seasons',
+    'offline_packets', 'offline_packet_tokens']) {
+    assert.ok(tables.has(required), `expected additive table ${required}`);
+  }
 
   const previousBulletinBody = 'Welcome to PacketBBS, a multi-node bulletin board system.\r\n\r\n' +
     'Check your electronic mail, scan the message conferences, browse the\r\n' +

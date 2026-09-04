@@ -7,7 +7,7 @@ const {
   isAllowedWebSocketOrigin,
 } = require('./guardrails');
 
-function createWebSocketServer(httpServer, nodeManager, config) {
+function createWebSocketServer(httpServer, nodeManager, config, services = {}) {
   const connectionLimiter = new FixedWindowLimiter({ max: 30, windowMs: 60 * 1000 });
   const loginFailureLimiter = new FixedWindowLimiter({ max: 12, windowMs: 15 * 60 * 1000 });
   const registrationLimiter = new FixedWindowLimiter({ max: 3, windowMs: 60 * 60 * 1000 });
@@ -51,6 +51,7 @@ function createWebSocketServer(httpServer, nodeManager, config) {
     };
 
     const session = new BBSSession(transport, nodeNum, nodeManager, {
+      ...services,
       recordLoginFailure() {
         return loginFailureLimiter.consume(connectionKey).allowed;
       },

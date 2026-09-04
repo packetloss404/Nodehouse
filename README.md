@@ -18,7 +18,7 @@ The Nodehouse is evolving toward a local-first community node inspired by the be
 - Curated file libraries, daily-turn doors, compact caller profiles, last-callers lists, and other small features that make a community feel inhabited
 - Authenticated store-and-forward federation only after local threading, unread state, moderation, and delivery queues are reliable
 
-The first traditional-BBS milestone is implemented: callers now receive a “Since Your Last Call” summary, use a compact conventional command shell, can persist novice/expert/super menu modes, run a real unread scan across conferences, distinguish public follow-ups from private replies, and view Last Callers. The existing special-interest boards are grouped under **Vibe Community**.
+The traditional caller loop now extends beyond the initial shell: callers can tune a personal newscan, resume a conference, catch up or mark a message unread, inspect threads, search messages, take a guided Daily Call, use the Front Porch and opt-in directory, page other nodes, play persistent daily-turn doors, browse the ANSI gallery, and exchange offline packets. The existing special-interest boards remain grouped under **Vibe Community**.
 
 The [traditional BBS research and loop design](docs/TRADITIONAL-BBS-RESEARCH.md) records the TriBBS, Spitfire, PCBoard, WWIV, Renegade, and Synchronet comparison. The broader network proposal, migration constraints, risks, and phased review checklist live in [HANDOFF.md](HANDOFF.md).
 
@@ -28,16 +28,20 @@ The [traditional BBS research and loop design](docs/TRADITIONAL-BBS-RESEARCH.md)
 
 - **Hybrid Access** — Raw Telnet server (TCP 2323, real IAC negotiation) + browser web terminal (xterm.js over WebSocket) with CRT scanline effect, both driving one `BBSSession` engine
 - **Multi-Node Concurrency** — Up to 16 simultaneous users with cross-protocol broadcasts: login/logout/disconnect notices, SysOp pages, and new-mail alerts reach online users regardless of how they connected
-- **Traditional Caller Loop** — A post-authentication “Since Your Last Call” summary, message/mail/new-file counts, previous caller, calls today, Last Callers, deliberate logoff, and persisted novice/expert/super menu modes
-- **ANSI Art UI** — Full-color retro interface with box drawing, gradients, and block art throughout (~40-state ANSI session machine, hand-written byte-level input parsing including backspace and Telnet IAC)
-- **Message Conferences** — 5 threaded conferences with access-level gating, per-user read tracking, correct global/per-conference newscan, public follow-up versus private reply, and a `/S` save / `/A` abort multi-line editor
+- **Traditional Caller Loop & Daily Call** — “Since Your Last Call” plus a guided `Z` route covering mail, subscribed conferences, bulletins, files, callers, and polls; deliberate logoff and persisted novice/expert/super menu modes remain intact
+- **ANSI Art UI & Gallery** — Full-color menus plus a curated, metadata-aware gallery of original 80-column `.ans` screens; unsafe terminal controls and oversized artwork are rejected
+- **Personal Newscan** — Opt-in conference subscriptions, caller-defined scan order, remembered conference, durable high-water metadata, catch-up, explicit mark-unread, and scans whose authority remains the per-message `message_read` record
+- **Threaded Message Reader** — Stable global/root identity, validated same-conference parents, thread view, access-scoped literal subject/body/author search, public follow-up versus private reply, and a `/S` save / `/A` abort editor; bounded drafts, signatures, and selected quoting are available at the service layer
 - **Electronic Mail** — Person-to-person mail with inbox/read/reply/delete, recipient validation, unread counts in the caller summary and main prompt, and live "new mail" push if the recipient is currently online
 - **Polls & Voting Booth** — Interactive polls with one-vote-per-user enforcement (DB-level unique constraint) and results rendered as percentage ASCII bar charts
 - **TeleChat** — 3 live rooms with real cross-node message relay scoped per room, join/leave announcements, and `/W` who's-here
 - **One-Liners** — A compact caller wall; usernames are ANSI-stripped before display
+- **Front Porch & Caller Cards** — Expiring notices, events, classifieds, help-wanted posts, the AutoMessage, and an alias-first directory; profiles are hidden until their caller explicitly opts in
+- **Node Lobby** — Presence with Available/Away/Busy/DND states, consent-based caller pages and private node chat, plus durable telegram fallback through local E-Mail
 - **Vibe Community** — Grouped boards for AI-assisted building, agents, prompts, and experimental workflows
-- **5 Door Games** — Two classic-inspired ports, two originals, and an AI Dungeon Master MUD powered by Claude
-- **SysOp Tools** — MOTD-on-login, SysOp paging (blinking alert to every level-200+ node), who's-online, system stats, and a token-authenticated web admin dashboard
+- **5 Persistent Door Games** — Trusted registry, daily launch allowances, bounded saves, completed-run scoring, and league tables; season storage is ready for scheduled competitions
+- **Packet Briefcase & QWK/REP** — One-time, expiring browser transfers export readable offline packets and import bounded replies; ZIP traversal, expansion, replay, conference access, and reply-parent checks guard the boundary
+- **SysOp Control Desk** — Role-separated moderator/SysOp permissions, profile and porch review, moderation queue, bounded audit history, MOTD/bulletin/user/message controls, node monitoring, and a token-authenticated dashboard
 - **File Libraries** — 4 browsable catalog areas for utilities, text files, caller uploads, and ANSI art (listing/catalog; transfer not yet wired)
 - **Persistent Storage** — SQLite (better-sqlite3, WAL mode, 14 tables) with scrypt-hashed passwords and call logging
 - **Deployment Guardrails** — Docker- and Railway-aware HTTP/Telnet ports, database health checks, secure production bootstrap, bounded login/registration/admin attempts, origin-checked WebSockets, CI, and end-to-end listener smoke tests
@@ -45,10 +49,10 @@ The [traditional BBS research and loop design](docs/TRADITIONAL-BBS-RESEARCH.md)
 ## Roadmap Summary
 
 1. **Traditional caller shell — shipped in 1.2.0** — reliable unread newscan, last-call summary, Last Callers, menu modes, conventional labels, public/private reply split, and idempotent disconnect cleanup
-2. **Reader continuity** — subscriptions, high-water pointers, catch-up, mark unread, quoted replies, search, and remembered current conference
-3. **Message and E-Mail foundation** — stable global IDs, real thread metadata, database-backed areas, Inbox/Sent/Saved/Drafts, moderation, and personal filters
-4. **Offline packets and file libraries** — Packet Briefcase, QWK/REP, search, extended file descriptions, batch downloads, and upload quarantine
-5. **PacketNet lab and adapters** — signed node identities, scheduled mail runs, trusted hub fan-out, retries, deduplication, authenticated NNTP, and optional FTN/FidoNet support
+2. **Community and reader release — implemented** — personal newscan, thread/search controls, Daily Call, caller cards, Front Porch, control desk, node paging/telegrams, persistent doors, offline packets, and ANSI gallery
+3. **File-library completion — next** — safe uploads/downloads, search, extended descriptions, batch downloads, and upload quarantine
+4. **Local message/mail depth — planned** — expose draft/signature/quote services throughout the terminal editor, add richer mailbox state, and move area charters into the database
+5. **PacketNet lab and adapters — backlog only** — signed node identities, scheduled mail runs, trusted hub fan-out, retries, deduplication, authenticated NNTP, and optional FTN/FidoNet support
 
 See [HANDOFF.md](HANDOFF.md) for acceptance criteria and protocol references.
 
@@ -124,8 +128,11 @@ The main menu provides access to all BBS functions:
 │  [N] New Message Scan     [L] Last Callers           │
 │  [W] Who's Online         [V] Voting Booth           │
 │  [O] One-Liners           [Y] Your Settings          │
-│  [P] Page SysOp           [S] System Information     │
-│  [X] Menu Mode            [G] Goodbye / Logoff       │
+│  [H] Front Porch          [I] Node Lobby             │
+│  [A] ANSI Gallery         [K] Offline Packets        │
+│  [Z] Daily Call           [P] Page SysOp             │
+│  [S] System Information   [X] Menu Mode              │
+│  [G] Goodbye / Logoff                                │
 └──────────────────────────────────────────────────────┘
 ```
 
@@ -159,9 +166,24 @@ Both Telnet and WebSocket connections construct the same `BBSSession` over a tin
 | 4 | AI Workflows | Discuss agents, prompts, context files, and tools | All users |
 | 5 | SysOp Corner | System administration discussion | SysOp only |
 
-Messages support threading (replies), per-user read tracking via the `message_read` join table, access-level gating per conference, and writing with `/S` to save and `/A` to abort.
+Messages support stable root/thread identity, validated same-conference replies, thread inspection, literal full-text-style search, per-user read tracking via the authoritative `message_read` join table, personal scan subscriptions/order, catch-up, mark-unread, access-level gating, and writing with `/S` to save and `/A` to abort. Draft, signature, and selected-quote services are bounded and durable; their complete interactive editor workflow remains future UI work.
 
 The message menu renders section headings from `config.json`. General Discussion and Show & Tell form the Main Board; Vibe Coding and AI Workflows form Vibe Community; SysOp Corner remains a restricted System conference. Numeric IDs are intentionally stable so existing posts do not need a data migration.
+
+## Daily Call, Front Porch, and Node Lobby
+
+- **Daily Call (`Z`)** presents a repeatable check-in across unread local mail, the caller's subscribed conferences, bulletins, new files, recent callers, and current polls.
+- **Front Porch (`H`)** collects expiring community notices, events, classifieds, help-wanted posts, and the AutoMessage. Caller submissions enter moderation; operator posts can publish directly.
+- **Caller Cards** expose a searchable handle-first directory with optional bio, interests, favorites, and ANSI avatar. New and migrated profiles are private until the caller opts in.
+- **Node Lobby (`I`)** adds Available, Away, Busy, and DND presence, caller-to-caller page requests, accepted private chat, and one-line telegrams. An unavailable recipient receives the telegram as durable local E-Mail.
+
+## ANSI Gallery
+
+The gallery reads curated `.ans` files from `art/gallery`, displays SAUCE title/author/group metadata when present, enforces the 80-column house layout, caps file size, and removes escape sequences that could manipulate the terminal outside the allowed drawing controls.
+
+## Offline Packets
+
+The packet desk offers a friendly Nodehouse Packet Briefcase plus traditional QWK export and REP import. Transfers use short-lived, one-use bearer links over the HTTP listener. Imports are bounded, access checked, parent checked, replay protected by caller/content hash, and committed atomically. PacketNet federation is not part of this release.
 
 ## Electronic Mail
 
@@ -199,6 +221,8 @@ An interactive voting subsystem (`polls`, `poll_options`, `poll_votes` tables):
 ## Door Games
 
 Prompt Quest, Token Tycoon, and Stack Overflow sit in the general arcade. Vibe Wars and Dungeon of the Vibe Lords retain their names as part of the Vibe corner's personality.
+
+Doors launch only from a trusted first-party registry. Vibe Wars, Prompt Quest, Token Tycoon, and Stack Overflow now save bounded state between calls; all five doors participate in daily launch allowances and completed-run league tables. The database also has season records for future scheduled competitions.
 
 ### 🚀 Vibe Wars
 *Inspired by TradeWars 2002*
@@ -244,6 +268,8 @@ The SysOp admin panel is a web-based single-file vanilla-JS SPA at `/admin` with
 - **Message Management** — Browse by conference, delete individual messages
 - **Bulletin Management** — Create, toggle active/inactive, delete announcements
 - **Node Monitoring** — Real-time view of who's online and what they're doing
+- **Community Moderation** — Review Front Porch submissions, hide directory profiles, inspect the moderation queue, and retain a bounded audit trail
+- **Role Separation** — Level-100 moderators can review community content; level-200 SysOps retain user and system administration
 
 ## Configuration
 
@@ -288,19 +314,22 @@ The Nodehouse uses SQLite through better-sqlite3 in WAL mode. New installations 
 
 For Docker upgrades, leave `NODEHOUSE_DB_PATH` unset unless deliberately selecting a database; the automatic discovery order is what keeps an existing renamed installation on its current database.
 
-The 14-table schema is created incrementally on startup and seeded on a brand-new board via namespaced CRUD modules over prepared statements:
+The schema is created incrementally on startup and seeded on a brand-new board via namespaced CRUD modules over prepared statements. Additive migrations preserve existing caller, message, and read-state rows:
 
 - **users** — Accounts with scrypt-hashed passwords (per-user salt), access levels, caller stats, and persistent menu mode
-- **messages** — Threaded messages organized by conference
-- **message_read** — Per-user read tracking for unread counts
+- **messages** — Threaded messages organized by conference, with stable global/root identity
+- **message_read**, **reader_subscriptions**, **reader_preferences**, **message_drafts** — Authoritative per-message read state plus personal scan order, high-water metadata, remembered conference, signatures, and drafts
 - **bulletins** — SysOp announcements with active/inactive toggle
 - **files** — File metadata with download counts
 - **call_log** — Login/logout history per node
 - **graffiti** — Graffiti wall entries
-- **private_mail** — Person-to-person mail with read/unread state
+- **private_mail** — Person-to-person mail and telegram fallback with read/unread state
+- **user_profiles**, **porch_notices**, **moderation_items**, **audit_events** — Private-by-default caller cards, Front Porch, moderation, and operator history
 - **polls**, **poll_options**, **poll_votes** — Polls, their choices, and one-vote-per-user records
 - **motd** — Message of the day shown on login
 - **dungeon_players**, **dungeon_history** — Persistent character state and AI-dungeon context
+- **door_saves**, **door_usage**, **door_runs**, **door_seasons** — Generalized persistent doors, daily admission, scores, and season definitions
+- **offline_packets**, **offline_packet_tokens**, **file_transfers** — Offline packet metadata, replay records, and expiring one-use transfers
 
 The SysOp account, welcome content, a sample poll, MOTD, and starter graffiti are seeded automatically on first launch. The familiar `SysOp / sysop` credentials are limited to explicit development/test mode; production seeding requires `NODEHOUSE_SYSOP_PASSWORD`.
 
@@ -333,8 +362,12 @@ Nodehouse/
 ├── src/
 │   ├── core/
 │   │   ├── ansi.js            # ANSI escape codes & art screens
-│   │   ├── bbs.js             # Session state machine (~40 states)
-│   │   └── database.js        # SQLite schema & CRUD (14 tables)
+│   │   ├── bbs.js             # Shared Telnet/browser session state machine
+│   │   ├── reader-service.js  # Subscriptions, newscan, cursors, drafts
+│   │   ├── message-service.js # Threads, safe message creation, search
+│   │   ├── daily-call-service.js
+│   │   ├── community-service.js
+│   │   └── database.js        # Additive SQLite schema & data APIs
 │   ├── server/
 │   │   ├── guardrails.js      # Rate, origin, and connection safeguards
 │   │   ├── runtime-config.js  # Railway/environment port resolution
@@ -342,13 +375,17 @@ Nodehouse/
 │   │   ├── websocket.js       # WebSocket server
 │   │   └── node-manager.js    # Multi-node connection tracking
 │   ├── doors/
+│   │   ├── registry.js        # Trusted door definitions and save adapters
 │   │   ├── door1.js           # Vibe Wars (trading game)
 │   │   ├── door2.js           # Prompt Quest (dungeon crawler)
 │   │   ├── door3.js           # Token Tycoon (startup sim)
 │   │   ├── door4.js           # Stack Overflow (hangman)
 │   │   └── door5.js           # Dungeon of the Vibe Lords (AI MUD)
 │   ├── admin/
-│   │   └── panel.js           # SysOp web admin panel (Express + embedded SPA)
+│   │   ├── authz.js           # Moderator/SysOp permissions
+│   │   └── panel.js           # SysOp web control desk
+│   ├── packets/               # Bounded ZIP, Briefcase, QWK/REP codecs
+│   ├── services/              # Door, packet, and ANSI-gallery services
 │   └── web/
 │       └── index.html         # Browser terminal (xterm.js)
 ├── test/                       # Branding, database, terminal, and caller-loop tests

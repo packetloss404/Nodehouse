@@ -2,6 +2,12 @@
 const ansi = require('./ansi');
 const db = require('./database');
 const config = require('../../config.json');
+const { createReaderService } = require('./reader-service');
+const { createMessageService } = require('./message-service');
+const { createDailyCallService } = require('./daily-call-service');
+const { CommunityService } = require('./community-service');
+const { DoorService } = require('../services/door-service');
+const { AnsiGallery } = require('../services/ansi-gallery');
 
 const MAX_INPUT_BUFFER_LENGTH = 4096;
 const MAX_INPUT_CHUNK_BYTES = 64 * 1024;
@@ -50,6 +56,25 @@ const STATES = {
   MOTD: 'motd',
   GOODBYE: 'goodbye',
   PAGE_SYSOP: 'page_sysop',
+  DAILY_CALL: 'daily_call',
+  READER_SETUP: 'reader_setup',
+  MESSAGE_SEARCH: 'message_search',
+  MESSAGE_RESULTS: 'message_results',
+  THREAD_LIST: 'thread_list',
+  FRONT_PORCH: 'front_porch',
+  DIRECTORY: 'directory',
+  PROFILE_EDIT: 'profile_edit',
+  PORCH_POST: 'porch_post',
+  NODE_LOBBY: 'node_lobby',
+  PAGE_TARGET: 'page_target',
+  PAGE_MESSAGE: 'page_message',
+  PAGE_RESPONSE: 'page_response',
+  PRIVATE_CHAT: 'private_chat',
+  TELEGRAM_TO: 'telegram_to',
+  TELEGRAM_BODY: 'telegram_body',
+  ANSI_GALLERY: 'ansi_gallery',
+  PACKET_MENU: 'packet_menu',
+  DOOR_LEADERBOARD: 'door_leaderboard',
   PAUSE: 'pause',
 };
 
@@ -65,6 +90,13 @@ class BBSSession {
     this.callLogId = null;
     this.sessionEnded = false;
     this.security = security;
+    this.reader = createReaderService(db);
+    this.messageService = createMessageService(db);
+    this.dailyCall = createDailyCallService(db);
+    this.community = new CommunityService(db);
+    this.doorService = new DoorService(db);
+    this.gallery = new AnsiGallery();
+    this.packetService = security.packetService || null;
     this.loginAttempts = 0;
 
     // State-specific data
@@ -96,6 +128,31 @@ class BBSSession {
 
   prompt(text) {
     this.write(`${ansi.brightCyan}    ${text}${ansi.brightWhite}`);
+  }
+
+  receiveAsync(message) {
+    this.write(`\r${ansi.eraseLine}${message}`);
+    const prompts = {
+      [STATES.CHAT_ACTIVE]: '> ', [STATES.PRIVATE_CHAT]: 'private> ',
+      [STATES.MESSAGE_WRITE_BODY]: '│ ', [STATES.NODE_LOBBY]: 'Node command: ',
+      [STATES.MAIN_MENU]: 'Main> ', [STATES.MESSAGE_BASES]: 'Conference #: ',
+      [STATES.MESSAGE_LIST]: 'Message command: ', [STATES.MESSAGE_READ]: 'F/R/T/U/N/P/Q: ',
+      [STATES.MESSAGE_WRITE_TO]: 'To: ', [STATES.MESSAGE_WRITE_SUBJECT]: 'Subject: ',
+      [STATES.FILE_AREAS]: 'Area #: ', [STATES.FILE_LIST]: 'Command: ',
+      [STATES.DOOR_GAMES]: 'Door #: ', [STATES.USER_SETTINGS]: 'Setting #: ',
+      [STATES.CHAT_ROOMS]: 'Room #: ', [STATES.GRAFFITI_WALL]: 'Command: ',
+      [STATES.GRAFFITI_WRITE]: 'One-liner: ', [STATES.PRIVATE_MAIL_MENU]: 'Command: ',
+      [STATES.PRIVATE_MAIL_INBOX]: 'Mail #: ', [STATES.POLLS_LIST]: 'Poll #: ',
+      [STATES.DAILY_CALL]: 'Daily command: ', [STATES.READER_SETUP]: 'Reader command: ',
+      [STATES.MESSAGE_SEARCH]: 'Search messages: ', [STATES.MESSAGE_RESULTS]: 'Result message #, or Q: ',
+      [STATES.THREAD_LIST]: 'Thread message #, or Q: ', [STATES.FRONT_PORCH]: 'Porch command: ',
+      [STATES.PROFILE_EDIT]: 'Caller card: ', [STATES.PORCH_POST]: 'Porch post: ',
+      [STATES.PAGE_TARGET]: 'Page caller or node #: ', [STATES.PAGE_MESSAGE]: 'Page note: ',
+      [STATES.TELEGRAM_TO]: 'Telegram to: ', [STATES.TELEGRAM_BODY]: 'Telegram text: ',
+      [STATES.ANSI_GALLERY]: 'Gallery #: ', [STATES.PACKET_MENU]: 'Packet command: ',
+    };
+    this.prompt(prompts[this.state] || '> ');
+    if (this.inputBuffer) this.write(this.inputEcho ? this.inputBuffer : '*'.repeat(this.inputBuffer.length));
   }
 
   handleData(data) {
@@ -171,6 +228,19 @@ class BBSSession {
 
   processInput(input) {
     if (this.sessionEnded) return;
+    try {
+      this.processInputUnchecked(input);
+    } catch (error) {
+      const message = String(error?.message || 'Command failed')
+        .replace(/\x1b(?:\[[0-?]*[ -/]*[@-~]|\][^\x07]*(?:\x07|\x1b\\))/g, '')
+        .replace(/[\r\n\0]/g, ' ').slice(0, 120);
+      this.write(`${ansi.brightRed}    ${message}${ansi.reset}\r\n`);
+      this.prompt('Try again: ');
+    }
+  }
+
+  processInputUnchecked(input) {
+    if (this.sessionEnded) return;
     switch (this.state) {
       case STATES.LOGIN_USERNAME:
         this.handleLoginUsername(input);
@@ -239,6 +309,63 @@ class BBSSession {
       case STATES.SYSTEM_STATS:
       case STATES.PAGE_SYSOP:
         this.showMainMenu();
+        break;
+      case STATES.DAILY_CALL:
+        this.handleDailyCall(input);
+        break;
+      case STATES.READER_SETUP:
+        this.handleReaderSetup(input);
+        break;
+      case STATES.MESSAGE_SEARCH:
+        this.handleMessageSearch(input);
+        break;
+      case STATES.MESSAGE_RESULTS:
+        this.handleMessageResults(input);
+        break;
+      case STATES.THREAD_LIST:
+        this.handleThreadList(input);
+        break;
+      case STATES.FRONT_PORCH:
+        this.handleFrontPorch(input);
+        break;
+      case STATES.DIRECTORY:
+        this.showFrontPorch();
+        break;
+      case STATES.PROFILE_EDIT:
+        this.handleProfileEdit(input);
+        break;
+      case STATES.PORCH_POST:
+        this.handlePorchPost(input);
+        break;
+      case STATES.NODE_LOBBY:
+        this.handleNodeLobby(input);
+        break;
+      case STATES.PAGE_TARGET:
+        this.handlePageTarget(input);
+        break;
+      case STATES.PAGE_MESSAGE:
+        this.handlePageMessage(input);
+        break;
+      case STATES.PAGE_RESPONSE:
+        this.handlePageResponse(input);
+        break;
+      case STATES.PRIVATE_CHAT:
+        this.handlePrivateChat(input);
+        break;
+      case STATES.TELEGRAM_TO:
+        this.handleTelegramTo(input);
+        break;
+      case STATES.TELEGRAM_BODY:
+        this.handleTelegramBody(input);
+        break;
+      case STATES.ANSI_GALLERY:
+        this.handleAnsiGallery(input);
+        break;
+      case STATES.PACKET_MENU:
+        this.handlePacketMenu(input);
+        break;
+      case STATES.DOOR_LEADERBOARD:
+        this.showDoorGames();
         break;
       case STATES.PAUSE:
         if (this.pauseCallback) {
@@ -415,6 +542,7 @@ class BBSSession {
 
   loginUser(user) {
     const previousLastCall = user.last_call_date;
+    this.stateData.previousLastCall = previousLastCall;
     this.user = user;
     db.users.updateLastCall(user.id);
     this.callLogId = db.callLog.logLogin(user.id, user.username, this.nodeNum);
@@ -541,6 +669,21 @@ class BBSSession {
       case 'P':
         this.showPageSysop();
         break;
+      case 'H':
+        this.showFrontPorch();
+        break;
+      case 'I':
+        this.showNodeLobby();
+        break;
+      case 'A':
+        this.showAnsiGallery();
+        break;
+      case 'K':
+        this.showPacketMenu();
+        break;
+      case 'Z':
+        this.showDailyCall();
+        break;
       case 'S':
         this.showSystemStats();
         break;
@@ -602,6 +745,25 @@ class BBSSession {
       return;
     }
 
+    if (input.toUpperCase() === 'R') {
+      this.showReaderSetup();
+      return;
+    }
+
+    if (input.toUpperCase() === 'C') {
+      const bases = this.getAccessibleMessageBases();
+      const currentId = this.reader.getCurrentBase(this.user.id, bases);
+      const current = bases.find(base => Number(base.id) === Number(currentId));
+      if (current) {
+        this.stateData.currentBase = current;
+        this.showMessageList();
+      } else {
+        this.write(`${ansi.brightYellow}    Choose a conference first.${ansi.reset}\r\n`);
+        this.prompt('Conference #: ');
+      }
+      return;
+    }
+
     const baseId = parseInt(input);
     const base = config.messageBases.find(b => b.id === baseId);
     if (!base || base.accessLevel > this.user.access_level) {
@@ -611,17 +773,13 @@ class BBSSession {
     }
 
     this.stateData.currentBase = base;
+    this.reader.setCurrentBase(this.user.id, base.id, this.getAccessibleMessageBases());
     this.showMessageList();
   }
 
   startNewMessageScan() {
     const bases = this.getAccessibleMessageBases();
-    const unread = [];
-    for (const base of bases) {
-      for (const message of db.messages.getUnreadByBase(base.id, this.user.id)) {
-        unread.push(message);
-      }
-    }
+    const unread = this.reader.scanUnread(this.user.id, bases);
 
     if (unread.length === 0) {
       this.write(`\r\n${ansi.brightYellow}    No new messages in your accessible conferences.${ansi.reset}\r\n`);
@@ -672,7 +830,7 @@ class BBSSession {
     }
 
     screen += `${d}    ├──────────────────────────────────────────────────────┤\r\n`;
-    screen += `${d}    │  ${y}[${w}#${y}]${c}Read msg  ${y}[${w}W${y}]${c}rite  ${y}[${w}N${y}]${c}ew msgs  ${y}[${w}Q${y}]${c}uit       ${d}  │\r\n`;
+    screen += `${d}    │  ${y}[${w}#${y}]${c}Read ${y}[${w}W${y}]${c}rite ${y}[${w}N${y}]${c}ew ${y}[${w}S${y}]${c}earch ${y}[${w}C${y}]${c}atch-up ${y}[${w}Q${y}]${c}uit ${d}│\r\n`;
     screen += `${d}    └──────────────────────────────────────────────────────┘${r}\r\n`;
 
     this.write(screen);
@@ -713,6 +871,20 @@ class BBSSession {
       return;
     }
 
+    if (cmd === 'S') {
+      this.state = STATES.MESSAGE_SEARCH;
+      this.prompt('Search messages: ');
+      return;
+    }
+
+    if (cmd === 'C') {
+      const result = this.reader.catchUp(this.user.id, this.stateData.currentBase.id,
+        this.getAccessibleMessageBases());
+      this.write(`${ansi.brightGreen}    Caught up ${result.markedRead || 0} message(s).${ansi.reset}\r\n`);
+      this.showMessageList();
+      return;
+    }
+
     // Try to read a specific message number
     const msgId = parseInt(cmd);
     if (!isNaN(msgId)) {
@@ -747,7 +919,7 @@ class BBSSession {
     };
 
     this.write(ansi.art.messageRead(display));
-    this.prompt('F/R/N/P/Q: ');
+    this.prompt('F/R/T/U/N/P/Q: ');
   }
 
   rememberMessageReturn() {
@@ -789,6 +961,7 @@ class BBSSession {
           replyTo: this.stateData.currentMessage.id,
           subject: 'Re: ' + (this.stateData.currentMessage.subject || '').replace(/^Re: /i, ''),
           to: 'All',
+          prefill: this.messageService.quote(this.stateData.currentMessage),
         };
         this.write(`\r\n${ansi.brightGreen}    Public follow-up in ${this.stateData.currentBase.name}${ansi.reset}\r\n`);
         this.prompt(`Subject [${this.stateData.newMessage.subject}]: `);
@@ -803,6 +976,29 @@ class BBSSession {
         this.write(`\r\n${ansi.brightGreen}    Private reply to ${this.stateData.currentMessage.from_user}${ansi.reset}\r\n`);
         this.prompt(`To [${this.stateData.newMail.to}]: `);
         break;
+      case 'T': {
+        const thread = this.messageService.getThread(this.stateData.currentMessage.id, {
+          accessibleBaseIds: this.getAccessibleMessageBases().map((base) => base.id),
+        });
+        this.stateData.threadMessages = thread;
+        this.state = STATES.THREAD_LIST;
+        this.write(`\r\n${ansi.brightCyan}    Thread (${thread.length} message${thread.length === 1 ? '' : 's'})${ansi.reset}\r\n`);
+        const depthById = new Map();
+        for (const item of thread.slice(0, 30)) {
+          const depth = item.reply_to ? Math.min((depthById.get(item.reply_to) || 0) + 1, 8) : 0;
+          depthById.set(item.id, depth);
+          const row = `${'  '.repeat(depth)}#${item.id} ${String(item.subject || '').slice(0, 36)} <${String(item.from_user || '').slice(0, 12)}>`;
+          this.write(`${ansi.cyan}    ${row.slice(0, 72)}${ansi.reset}\r\n`);
+        }
+        this.prompt('Thread message #, or Q: ');
+        break;
+      }
+      case 'U':
+        this.reader.markUnread(this.user.id, this.stateData.currentMessage.id,
+          this.getAccessibleMessageBases());
+        this.write(`${ansi.brightGreen}    Marked unread.${ansi.reset}\r\n`);
+        this.prompt('F/R/T/U/N/P/Q: ');
+        break;
       case 'N':
         if (this.stateData.messageIndex < msgs.length - 1) {
           this.stateData.messageIndex++;
@@ -816,7 +1012,7 @@ class BBSSession {
           } else if (scanMode === 'BASE') {
             this.showMessageList();
           } else {
-            this.prompt('F/R/N/P/Q: ');
+            this.prompt('F/R/T/U/N/P/Q: ');
           }
         }
         break;
@@ -826,7 +1022,7 @@ class BBSSession {
           this.showMessage(msgs[this.stateData.messageIndex]);
         } else {
           this.write(`${ansi.brightYellow}    Beginning of messages.${ansi.reset}\r\n`);
-          this.prompt('F/R/N/P/Q: ');
+          this.prompt('F/R/T/U/N/P/Q: ');
         }
         break;
       case 'Q':
@@ -840,9 +1036,100 @@ class BBSSession {
         break;
       default:
         this.write(`${ansi.brightRed}    Invalid command!${ansi.reset}\r\n`);
-        this.prompt('F/R/N/P/Q: ');
+        this.prompt('F/R/T/U/N/P/Q: ');
         break;
     }
+  }
+
+  showReaderSetup() {
+    this.state = STATES.READER_SETUP;
+    this.nodeManager.setActivity(this.nodeNum, 'Reader Setup');
+    const bases = this.getAccessibleMessageBases();
+    const subscriptions = this.reader.getSubscriptions(this.user.id, bases);
+    const byId = new Map(bases.map((base) => [base.id, base]));
+    this.write(ansi.clear + `${ansi.brightCyan}    NODEHOUSE // PERSONAL NEWSCAN\r\n`);
+    this.write(`${ansi.cyan}    --------------------------------------------------------${ansi.reset}\r\n`);
+    subscriptions.forEach((item, index) => {
+      const base = byId.get(item.base_id);
+      this.write(`${ansi.brightYellow}    ${index + 1}. ${item.subscribed ? '[X]' : '[ ]'}${ansi.brightWhite} ${String(base?.name || item.base_id).slice(0, 42)}${ansi.reset}\r\n`);
+    });
+    this.write(`\r\n${ansi.cyan}    T# toggle  U# move up  D# move down  Q conferences${ansi.reset}\r\n`);
+    this.prompt('Reader command: ');
+  }
+
+  handleReaderSetup(input) {
+    const command = String(input || '').trim().toUpperCase();
+    if (!command || command === 'Q') { this.showMessageBases(); return; }
+    const bases = this.getAccessibleMessageBases();
+    const subscriptions = this.reader.getSubscriptions(this.user.id, bases);
+    const index = Number(command.slice(1)) - 1;
+    if (!Number.isInteger(index) || index < 0 || index >= subscriptions.length) {
+      this.write(`${ansi.brightRed}    Use T#, U#, D#, or Q.${ansi.reset}\r\n`);
+      this.prompt('Reader command: ');
+      return;
+    }
+    if (command[0] === 'T') {
+      const item = subscriptions[index];
+      this.reader.setSubscription(this.user.id, item.base_id, !item.subscribed, bases);
+    } else if (command[0] === 'U' || command[0] === 'D') {
+      const target = command[0] === 'U' ? index - 1 : index + 1;
+      if (target >= 0 && target < subscriptions.length) {
+        const ordered = subscriptions.map((item) => item.base_id);
+        [ordered[index], ordered[target]] = [ordered[target], ordered[index]];
+        this.reader.reorderSubscriptions(this.user.id, ordered, bases);
+      }
+    }
+    this.showReaderSetup();
+  }
+
+  handleMessageSearch(input) {
+    const query = String(input || '').trim();
+    if (!query) { this.showMessageList(); return; }
+    const results = this.messageService.search(query, {
+      accessibleBaseIds: this.getAccessibleMessageBases().map((base) => base.id), limit: 30,
+    });
+    this.stateData.searchResults = results;
+    this.write(`\r\n${ansi.brightCyan}    Search results for "${query.slice(0, 40)}"${ansi.reset}\r\n`);
+    if (!results.length) this.write(`${ansi.brightYellow}    No matching messages.${ansi.reset}\r\n`);
+    for (const item of results) {
+      this.write(`${ansi.brightYellow}    #${String(item.id).padEnd(6)}${ansi.brightWhite}${String(item.subject || '').slice(0, 38).padEnd(39)}${ansi.green}<${String(item.from_user || '').slice(0, 12)}>${ansi.reset}\r\n`);
+    }
+    this.state = STATES.MESSAGE_RESULTS;
+    this.prompt('Result message #, or Q: ');
+  }
+
+  handleMessageResults(input) {
+    if (!input || String(input).toUpperCase() === 'Q') { this.showMessageList(); return; }
+    const id = Number(input);
+    const results = this.stateData.searchResults || [];
+    const message = results.find(item => Number(item.id) === id);
+    if (!message) { this.prompt('Result message #, or Q: '); return; }
+    this.stateData.messages = results;
+    this.stateData.messageIndex = results.findIndex(item => Number(item.id) === id);
+    this.stateData.scanMode = null;
+    this.showMessage(message);
+  }
+
+  handleThreadList(input) {
+    if (String(input || '').toUpperCase() === 'U') {
+      this.reader.markUnread(this.user.id, this.stateData.currentMessage.id,
+        this.getAccessibleMessageBases());
+      this.write(`${ansi.brightGreen}    Marked current message unread.${ansi.reset}\r\n`);
+      this.prompt('Thread message #, or Q: ');
+      return;
+    }
+    if (!input || String(input).toUpperCase() === 'Q') {
+      this.showMessage(this.stateData.currentMessage);
+      return;
+    }
+    const id = Number(input);
+    const thread = this.stateData.threadMessages || [];
+    const message = thread.find(item => Number(item.id) === id);
+    if (!message) { this.prompt('Thread message #, or Q: '); return; }
+    this.stateData.messages = thread;
+    this.stateData.messageIndex = thread.findIndex(item => Number(item.id) === id);
+    this.stateData.scanMode = null;
+    this.showMessage(message);
   }
 
   // ─── MESSAGE WRITING ────────────────────────────────────
@@ -866,16 +1153,22 @@ class BBSSession {
       this.prompt('Subject: ');
       return;
     }
+    if (Buffer.byteLength(nm.subject, 'utf8') > this.messageService.constants.MAX_SUBJECT_LENGTH) {
+      this.write(`${ansi.brightRed}    Subject is too long.${ansi.reset}\r\n`);
+      this.prompt('Subject: ');
+      return;
+    }
     this.state = STATES.MESSAGE_WRITE_BODY;
-    this.stateData.messageLines = [];
-    this.write(`\r\n${ansi.brightGreen}    Enter your message (type ${ansi.brightWhite}/S${ansi.brightGreen} to save, ${ansi.brightWhite}/A${ansi.brightGreen} to abort):${ansi.reset}\r\n`);
+    this.stateData.messageLines = nm.prefill ? nm.prefill.split(/\r?\n/) : [];
+    this.write(`\r\n${ansi.brightGreen}    Enter your message (${ansi.brightWhite}/S${ansi.brightGreen} save, ${ansi.brightWhite}/D${ansi.brightGreen} draft, ${ansi.brightWhite}/A${ansi.brightGreen} abort):${ansi.reset}\r\n`);
     this.write(`${ansi.cyan}    ──────────────────────────────────────────${ansi.reset}\r\n`);
+    if (nm.prefill) this.write(`${ansi.cyan}${nm.prefill}${ansi.reset}\r\n`);
     this.prompt('│ ');
   }
 
   handleMessageWriteBody(input) {
     if (input.toUpperCase() === '/S') {
-      const body = this.stateData.messageLines.join('\r\n');
+      const body = this.reader.applySignature(this.user.id, this.stateData.messageLines.join('\r\n'));
       if (!body.trim()) {
         this.write(`${ansi.brightRed}    Message is empty! Aborted.${ansi.reset}\r\n`);
         this.finishCompose(() => this.showMessageList());
@@ -884,14 +1177,15 @@ class BBSSession {
 
       const nm = this.stateData.newMessage;
       const base = this.stateData.currentBase;
-      const messageId = db.messages.create(
-        base.id,
-        this.user.username,
-        nm.to,
-        nm.subject,
+      const messageId = this.messageService.create({
+        baseId: base.id,
+        fromUser: this.user.username,
+        toUser: nm.to,
+        subject: nm.subject,
         body,
-        nm.replyTo || null
-      );
+        replyTo: nm.replyTo || null,
+        accessibleBaseIds: this.getAccessibleMessageBases().map(item => item.id),
+      });
       db.messages.markRead(messageId, this.user.id);
       db.users.incrementPosts(this.user.id);
 
@@ -906,6 +1200,26 @@ class BBSSession {
       return;
     }
 
+    if (input.toUpperCase() === '/D') {
+      const nm = this.stateData.newMessage;
+      const saved = this.reader.saveDraft(this.user.id, {
+        baseId: this.stateData.currentBase.id,
+        toUser: nm.to,
+        subject: nm.subject,
+        body: this.stateData.messageLines.join('\r\n'),
+        replyTo: nm.replyTo || null,
+      }, this.getAccessibleMessageBases());
+      this.write(`${ansi.brightGreen}    Draft #${saved.id} saved.${ansi.reset}\r\n`);
+      this.finishCompose(() => this.showMessageList());
+      return;
+    }
+
+    const proposedBytes = Buffer.byteLength([...this.stateData.messageLines, input].join('\r\n'), 'utf8');
+    if (proposedBytes > this.messageService.constants.MAX_BODY_BYTES) {
+      this.write(`${ansi.brightRed}    Message body limit reached. Use /S, /D, or /A.${ansi.reset}\r\n`);
+      this.prompt('│ ');
+      return;
+    }
     this.stateData.messageLines.push(input);
     this.prompt('│ ');
   }
@@ -1038,7 +1352,7 @@ class BBSSession {
       `${d}    │  ${y}[${w}5${y}]${c} Dungeon of the      ${g}AI Dungeon Master MUD      ${d}│\r\n` +
       `${d}    │      ${c} Vibe Lords         ${g}(Claude is your DM!)       ${d}│\r\n` +
       `${d}    │                                                      │\r\n` +
-      `${d}    │  ${y}[${w}Q${y}]${c} Return to Main Menu                            ${d}  │\r\n` +
+      `${d}    │  ${y}[${w}L${y}]${c} League tables   ${y}[${w}Q${y}]${c} Return to Main Menu          ${d}  │\r\n` +
       `${d}    └──────────────────────────────────────────────────────┘${r}\r\n`;
 
     this.write(screen);
@@ -1049,6 +1363,11 @@ class BBSSession {
     const cmd = (input || '').toUpperCase();
     if (cmd === 'Q' || !cmd) {
       this.showMainMenu();
+      return;
+    }
+
+    if (cmd === 'L') {
+      this.showDoorLeaderboard();
       return;
     }
 
@@ -1066,19 +1385,48 @@ class BBSSession {
     this.nodeManager.setActivity(this.nodeNum, `Playing ${doorNames[doorNum]}`);
 
     try {
-      const DoorClass = require(`../doors/door${doorNum}`);
-      this.doorGame = new DoorClass(this);
+      const launched = this.doorService.launch(this, doorNum);
+      if (!launched.allowed) {
+        this.write(`${ansi.brightYellow}    Daily turns used. The door reopens tomorrow.${ansi.reset}\r\n`);
+        this.showDoorGames();
+        return;
+      }
+      this.activeDoorRun = launched;
+      this.doorGame = launched.door;
       this.state = STATES.DOOR_PLAYING;
       this.doorGame.start();
     } catch (e) {
+      if (this.activeDoorRun) {
+        try { this.activeDoorRun.finish(); } catch {}
+      }
+      this.activeDoorRun = null;
+      this.doorGame = null;
       this.write(`${ansi.brightRed}    Door game not available: ${e.message}${ansi.reset}\r\n`);
       this.showDoorGames();
     }
   }
 
   exitDoor() {
+    if (this.activeDoorRun) {
+      try { this.activeDoorRun.finish(); } catch {}
+    }
+    this.activeDoorRun = null;
     this.doorGame = null;
     this.showDoorGames();
+  }
+
+  showDoorLeaderboard() {
+    this.state = STATES.DOOR_LEADERBOARD;
+    this.write(ansi.clear + `${ansi.brightCyan}    NODEHOUSE // DOOR LEAGUE TABLES${ansi.reset}\r\n`);
+    for (const door of this.doorService.list()) {
+      this.write(`\r\n${ansi.brightYellow}    ${door.number}. ${door.name}${ansi.reset}\r\n`);
+      const leaders = this.doorService.leaderboard(door.id, 5, 'all');
+      if (!leaders.length) this.write(`${ansi.cyan}       No completed runs yet.${ansi.reset}\r\n`);
+      leaders.forEach((entry, index) => this.write(
+        `${ansi.brightWhite}       ${index + 1}. ${String(entry.username || 'Caller').slice(0, 20).padEnd(20)} ${ansi.green}${entry.score}${ansi.reset}\r\n`
+      ));
+    }
+    this.write(ansi.pausePrompt);
   }
 
   // ─── BULLETINS ──────────────────────────────────────────
@@ -1170,6 +1518,266 @@ class BBSSession {
     this.write(ansi.art.systemStats(stats));
   }
 
+  // ─── DAILY CALL / FRONT PORCH ───────────────────────────
+
+  showDailyCall() {
+    this.state = STATES.DAILY_CALL;
+    this.nodeManager.setActivity(this.nodeNum, 'Daily Call');
+    const report = this.dailyCall.snapshot(this.user, this.getAccessibleMessageBases(), {
+      since: this.stateData.previousLastCall || null, currentCallLogId: this.callLogId,
+    });
+    this.write(ansi.clear + `${ansi.brightCyan}    NODEHOUSE // THE DAILY CALL${ansi.reset}\r\n`);
+    this.write(`${ansi.cyan}    --------------------------------------------------------${ansi.reset}\r\n`);
+    this.write(`${ansi.brightYellow}    Mail waiting:${ansi.brightWhite} ${report.mail.unread}\r\n`);
+    this.write(`${ansi.brightYellow}    Subscribed conference messages:${ansi.brightWhite} ${report.conferences.totalUnread}\r\n`);
+    this.write(`${ansi.brightYellow}    New bulletins / files:${ansi.brightWhite} ${report.bulletins.newSinceLastCall} / ${report.files.newSinceLastCall}\r\n`);
+    this.write(`${ansi.brightYellow}    Callers since last call:${ansi.brightWhite} ${report.callers.sinceLastCall}\r\n`);
+    this.write(`${ansi.brightYellow}    Active voting booths:${ansi.brightWhite} ${report.polls.active}${ansi.reset}\r\n\r\n`);
+    this.write(`${ansi.cyan}    [N] Newscan  [E] Mail  [B] Bulletins  [F] Files  [H] Porch  [Q] Main${ansi.reset}\r\n`);
+    this.prompt('Daily command: ');
+  }
+
+  handleDailyCall(input) {
+    const routes = { N: 'startNewMessageScan', E: 'showPrivateMailMenu', B: 'showBulletins',
+      F: 'showFileAreas', H: 'showFrontPorch', Q: 'showMainMenu' };
+    const method = routes[String(input || 'Q').toUpperCase()];
+    if (method) this[method](); else this.showDailyCall();
+  }
+
+  showFrontPorch() {
+    this.state = STATES.FRONT_PORCH;
+    this.nodeManager.setActivity(this.nodeNum, 'Front Porch');
+    const posts = this.community.listPorch({ limit: 12 });
+    const profile = this.community.profileForUser(this.user.id);
+    this.write(ansi.clear + `${ansi.brightCyan}    NODEHOUSE // FRONT PORCH${ansi.reset}\r\n`);
+    this.write(`${ansi.cyan}    --------------------------------------------------------${ansi.reset}\r\n`);
+    if (!posts.length) this.write(`${ansi.brightYellow}    The porch is quiet. Leave the first card on the board.${ansi.reset}\r\n`);
+    for (const post of posts) {
+      this.write(`${ansi.brightYellow}    ${post.pinned ? '*' : '-'} ${String(post.title).slice(0, 42)}${ansi.green} [${post.notice_type}]${ansi.reset}\r\n`);
+      for (const line of ansi.wrapText(post.body, 68).slice(0, 2)) this.write(`${ansi.brightWhite}      ${line}${ansi.reset}\r\n`);
+      this.write(`${ansi.cyan}      -- ${post.author_username}${ansi.reset}\r\n`);
+    }
+    this.write(`\r\n${ansi.cyan}    [D] Directory  [P] Post  [V] Profile ${profile?.profile_visible ? 'visible' : 'hidden'}  [E] Edit card  [Q] Main${ansi.reset}\r\n`);
+    this.prompt('Porch command: ');
+  }
+
+  handleFrontPorch(input) {
+    const cmd = String(input || '').toUpperCase();
+    if (cmd === 'Q' || !cmd) { this.showMainMenu(); return; }
+    if (cmd === 'D') { this.showDirectory(); return; }
+    if (cmd === 'V') {
+      const current = this.community.profileForUser(this.user.id);
+      this.community.saveProfile(this.user.id, { profile_visible: !current?.profile_visible });
+      this.showFrontPorch(); return;
+    }
+    if (cmd === 'E') {
+      this.state = STATES.PROFILE_EDIT;
+      this.prompt('Card as display name | interests | short bio: '); return;
+    }
+    if (cmd === 'P') {
+      this.stateData.porchDraft = { stage: 'title' };
+      this.state = STATES.PORCH_POST;
+      this.prompt('Notice title: '); return;
+    }
+    this.showFrontPorch();
+  }
+
+  showDirectory() {
+    this.state = STATES.DIRECTORY;
+    const callers = this.community.directory({ limit: 30 });
+    this.write(ansi.clear + `${ansi.brightCyan}    NODEHOUSE // HOUSE DIRECTORY${ansi.reset}\r\n`);
+    if (!callers.length) this.write(`${ansi.brightYellow}    No callers have opted into the directory yet.${ansi.reset}\r\n`);
+    for (const caller of callers) {
+      this.write(`${ansi.brightYellow}    ${String(caller.username).slice(0, 18).padEnd(19)}${ansi.brightWhite}${String(caller.display_name || '').slice(0, 24)}${ansi.reset}\r\n`);
+      if (caller.interests) this.write(`${ansi.cyan}      ${String(caller.interests).slice(0, 64)}${ansi.reset}\r\n`);
+    }
+    this.write(ansi.pausePrompt);
+  }
+
+  handleProfileEdit(input) {
+    const [display_name = '', interests = '', ...bioParts] = String(input || '').split('|').map((item) => item.trim());
+    this.community.saveProfile(this.user.id, { display_name, interests, bio: bioParts.join(' | ') });
+    this.write(`${ansi.brightGreen}    Caller card saved. Visibility remains your choice.${ansi.reset}\r\n`);
+    this.showFrontPorch();
+  }
+
+  handlePorchPost(input) {
+    const draft = this.stateData.porchDraft;
+    if (!draft || !input) { this.showFrontPorch(); return; }
+    if (draft.stage === 'title') {
+      draft.title = input; draft.stage = 'body'; this.prompt('Notice text: '); return;
+    }
+    const post = this.community.createPorchPost({ id: this.user.id, access_level: this.user.access_level },
+      { type: 'notice', title: draft.title, body: input });
+    this.stateData.porchDraft = null;
+    this.write(`${ansi.brightGreen}    Porch card ${post.status === 'pending' ? 'sent to the moderation desk' : 'posted'}.${ansi.reset}\r\n`);
+    this.showFrontPorch();
+  }
+
+  // ─── LIVE NODES / PAGES / TELEGRAMS ────────────────────
+
+  showNodeLobby() {
+    this.state = STATES.NODE_LOBBY;
+    this.nodeManager.setActivity(this.nodeNum, 'Node Lobby');
+    const nodes = this.nodeManager.getOnlineUsers();
+    const pending = this.nodeManager.getPendingPages(this.nodeNum);
+    this.write(ansi.clear + `${ansi.brightCyan}    NODEHOUSE // OCCUPIED NODES${ansi.reset}\r\n`);
+    for (const node of nodes) this.write(`${ansi.brightYellow}    ${String(node.nodeNum).padEnd(4)}${ansi.brightWhite}${String(node.username || 'Logging in').slice(0, 18).padEnd(19)}${ansi.green}${node.presence.padEnd(10)} ${String(node.activity || '').slice(0, 25)}${ansi.reset}\r\n`);
+    for (const invite of pending) {
+      this.write(`${ansi.brightMagenta}    PAGE ${invite.id.slice(0, 8)} from ${String(invite.fromUsername).slice(0, 24)}${ansi.reset}\r\n`);
+      for (const line of ansi.wrapText(invite.message, 68)) {
+        this.write(`${ansi.brightWhite}      ${line}${ansi.reset}\r\n`);
+      }
+    }
+    this.write(`\r\n${ansi.cyan}    [P] Page  [A id] Accept  [D id] Decline  [S status] Presence\r\n    [T] Telegram  [C] Private chat  [Q] Main${ansi.reset}\r\n`);
+    this.prompt('Node command: ');
+  }
+
+  handleNodeLobby(input) {
+    const value = String(input || '').trim();
+    const cmd = value.toUpperCase();
+    if (!cmd || cmd === 'Q') { this.showMainMenu(); return; }
+    if (cmd === 'P') { this.state = STATES.PAGE_TARGET; this.prompt('Page caller or node #: '); return; }
+    if (cmd === 'T') { this.state = STATES.TELEGRAM_TO; this.prompt('Telegram to: '); return; }
+    if (cmd === 'C') {
+      const node = this.nodeManager.getNode(this.nodeNum);
+      if (!node?.privateChatId) { this.write(`${ansi.brightYellow}    No private chat is open.${ansi.reset}\r\n`); this.showNodeLobby(); return; }
+      this.state = STATES.PRIVATE_CHAT; this.prompt('private> '); return;
+    }
+    if (cmd.startsWith('S ')) {
+      try { this.nodeManager.setPresence(this.nodeNum, value.slice(2).trim()); }
+      catch { this.write(`${ansi.brightRed}    Use available, away, busy, or dnd.${ansi.reset}\r\n`); }
+      this.showNodeLobby(); return;
+    }
+    const [verb, shortId] = cmd.split(/\s+/, 2);
+    if ((verb === 'A' || verb === 'D') && !shortId) {
+      this.write(`${ansi.brightYellow}    Include the page ID shown above.${ansi.reset}\r\n`);
+      this.showNodeLobby();
+      return;
+    }
+    const pending = this.nodeManager.getPendingPages(this.nodeNum);
+    const matches = pending.filter((item) => item.id.toUpperCase().startsWith(shortId || ''));
+    const invite = matches.length === 1 ? matches[0] : null;
+    if ((verb === 'A' || verb === 'D') && matches.length !== 1) {
+      this.write(`${ansi.brightYellow}    Page ID is missing or ambiguous.${ansi.reset}\r\n`);
+      this.showNodeLobby();
+      return;
+    }
+    if (invite && verb === 'A') {
+      const result = this.nodeManager.acceptPage(this.nodeNum, invite.id);
+      if (result.ok) { this.state = STATES.PRIVATE_CHAT; this.prompt('private> '); return; }
+    }
+    if (invite && verb === 'D') this.nodeManager.declinePage(this.nodeNum, invite.id);
+    this.showNodeLobby();
+  }
+
+  handlePageTarget(input) {
+    if (!input) { this.showNodeLobby(); return; }
+    this.stateData.pageTarget = /^\d+$/.test(input) ? Number(input) : input;
+    this.state = STATES.PAGE_MESSAGE;
+    this.prompt('Page note: ');
+  }
+
+  handlePageMessage(input) {
+    const result = this.nodeManager.pageUser(this.nodeNum, this.stateData.pageTarget, input);
+    this.write(`${result.ok ? ansi.brightGreen : ansi.brightYellow}    ${result.ok ? 'Page sent.' : `Page not sent (${result.code}). Use Telegram for offline callers.`}${ansi.reset}\r\n`);
+    this.showNodeLobby();
+  }
+
+  handlePageResponse() { this.showNodeLobby(); }
+
+  handlePrivateChat(input) {
+    if (String(input).toUpperCase() === '/Q') {
+      this.nodeManager.leavePrivateChat(this.nodeNum, `${this.user.username} left private chat.`);
+      this.showNodeLobby(); return;
+    }
+    const result = this.nodeManager.sendPrivateChat(this.nodeNum, input);
+    if (!result.ok) {
+      this.write(`${ansi.brightYellow}    Private chat closed.${ansi.reset}\r\n`);
+      this.showNodeLobby();
+      return;
+    }
+    this.prompt('private> ');
+  }
+
+  handleTelegramTo(input) {
+    if (!input) { this.showNodeLobby(); return; }
+    this.stateData.telegramTo = input;
+    this.state = STATES.TELEGRAM_BODY;
+    this.prompt('Telegram text: ');
+  }
+
+  handleTelegramBody(input) {
+    const result = this.nodeManager.telegram(this.nodeNum, this.stateData.telegramTo, input);
+    this.write(`${result.ok ? ansi.brightGreen : ansi.brightRed}    ${result.ok ? 'Telegram queued.' : `Telegram failed (${result.code}).`}${ansi.reset}\r\n`);
+    this.showNodeLobby();
+  }
+
+  // ─── ANSI GALLERY / OFFLINE PACKETS ────────────────────
+
+  showAnsiGallery() {
+    this.state = STATES.ANSI_GALLERY;
+    this.nodeManager.setActivity(this.nodeNum, 'ANSI Art Gallery');
+    const works = this.gallery.list();
+    this.stateData.galleryWorks = works;
+    this.write(ansi.clear + `${ansi.brightMagenta}    NODEHOUSE // ANSI ART GALLERY${ansi.reset}\r\n`);
+    this.write(`${ansi.cyan}    --------------------------------------------------------${ansi.reset}\r\n`);
+    works.forEach((work, index) => this.write(`${ansi.brightYellow}    ${index + 1}. ${ansi.brightWhite}${String(work.title).slice(0, 36).padEnd(37)}${ansi.green}${String(work.author).slice(0, 18)}${ansi.reset}\r\n`));
+    this.write(`\r\n${ansi.cyan}    Choose a piece, or Q to return.${ansi.reset}\r\n`);
+    this.prompt('Gallery #: ');
+  }
+
+  handleAnsiGallery(input) {
+    if (!input || String(input).toUpperCase() === 'Q') { this.showMainMenu(); return; }
+    const work = this.stateData.galleryWorks?.[Number(input) - 1];
+    if (!work) { this.showAnsiGallery(); return; }
+    try {
+      const art = this.gallery.read(work.id);
+      this.write(ansi.clear + art.content + `\r\n${ansi.brightCyan}    ${work.title} // ${work.author}${ansi.reset}\r\n` + ansi.pausePrompt);
+      this.state = STATES.PAUSE;
+      this.pauseCallback = () => this.showAnsiGallery();
+    } catch (error) {
+      this.write(`${ansi.brightRed}    Artwork unavailable: ${error.message}${ansi.reset}\r\n`);
+      this.showAnsiGallery();
+    }
+  }
+
+  showPacketMenu() {
+    this.state = STATES.PACKET_MENU;
+    this.nodeManager.setActivity(this.nodeNum, 'Packet Briefcase');
+    this.write(ansi.clear + `${ansi.brightCyan}    NODEHOUSE // PACKET BRIEFCASE${ansi.reset}\r\n`);
+    this.write(`${ansi.brightWhite}    Take the house offline. Read deliberately; reply on your next call.${ansi.reset}\r\n\r\n`);
+    this.write(`${ansi.cyan}    [1] Nodehouse Briefcase ZIP   [2] QWK packet\r\n    [3] Upload Briefcase replies [4] Upload REP replies   [Q] Main${ansi.reset}\r\n`);
+    this.prompt('Packet command: ');
+  }
+
+  handlePacketMenu(input) {
+    const cmd = String(input || '').toUpperCase();
+    if (!cmd || cmd === 'Q') { this.showMainMenu(); return; }
+    if (!this.packetService) {
+      this.write(`${ansi.brightYellow}    Packet transfers are unavailable on this connection.${ansi.reset}\r\n`);
+      this.showPacketMenu(); return;
+    }
+    try {
+      if (cmd === '1' || cmd === '2') {
+        const format = cmd === '1' ? 'briefcase' : 'qwk';
+        const packet = this.packetService.createExport(this.user, format);
+        this.write(`${ansi.brightGreen}    Packet ready (${packet.messageCount} messages, expires in 15 minutes):${ansi.reset}\r\n`);
+        this.write(`${ansi.brightWhite}    /transfers/packet/${format}/${packet.token}${ansi.reset}\r\n`);
+      } else if (cmd === '3' || cmd === '4') {
+        const format = cmd === '3' ? 'briefcase' : 'rep';
+        const upload = this.packetService.createImport(this.user, format);
+        this.write(`${ansi.brightGreen}    POST your packet within 15 minutes to:${ansi.reset}\r\n`);
+        this.write(`${ansi.brightWhite}    /transfers/packet/${format}/${upload.token}${ansi.reset}\r\n`);
+      }
+    } catch (error) {
+      this.write(`${ansi.brightRed}    Packet error: ${error.message}${ansi.reset}\r\n`);
+    }
+    this.write(ansi.pausePrompt);
+    this.state = STATES.PAUSE;
+    this.pauseCallback = () => this.showPacketMenu();
+  }
+
   showUserSettings() {
     this.state = STATES.USER_SETTINGS;
     this.nodeManager.setActivity(this.nodeNum, 'User Settings');
@@ -1189,6 +1797,7 @@ class BBSSession {
       `${ansi.frameRow(d, `  ${y}[${w}2${y}]${c} Location:     ${w}${String(this.user.location || 'Not set').substring(0, 30)}`)}\r\n` +
       `${ansi.frameRow(d, `  ${y}[${w}3${y}]${c} Email:        ${w}${String(this.user.email || 'Not set').substring(0, 30)}`)}\r\n` +
       `${ansi.frameRow(d, `  ${y}[${w}4${y}]${c} Menu Mode:    ${w}${String(this.user.menu_mode || 'NOVICE').substring(0, 30)}`)}\r\n` +
+      `${ansi.frameRow(d, `  ${y}[${w}5${y}]${c} Signature:    ${w}${String(this.reader.getSignature(this.user.id) || 'Not set').substring(0, 30)}`)}\r\n` +
       `${d}    ├──────────────────────────────────────────────────────┤\r\n` +
       `${ansi.frameRow(d, `  ${y}[${w}Q${y}]${c} Return to Main Menu`)}\r\n` +
       `${d}    └──────────────────────────────────────────────────────┘${r}\r\n`;
@@ -1212,6 +1821,13 @@ class BBSSession {
       return;
     }
 
+    if (cmd === '5') {
+      this.stateData.settingField = 'reader_signature';
+      this.state = STATES.USER_SETTINGS_FIELD;
+      this.prompt('New compact signature: ');
+      return;
+    }
+
     if (fields[cmd]) {
       this.stateData.settingField = fields[cmd];
       this.state = STATES.USER_SETTINGS_FIELD;
@@ -1222,7 +1838,10 @@ class BBSSession {
   }
 
   handleUserSettingsField(input) {
-    if (input) {
+    if (this.stateData.settingField === 'reader_signature') {
+      this.reader.setSignature(this.user.id, input || '');
+      this.write(`${ansi.brightGreen}    Signature updated!${ansi.reset}\r\n`);
+    } else if (input) {
       db.users.update(this.user.id, { [this.stateData.settingField]: input });
       this.user = db.users.getById(this.user.id);
       this.write(`${ansi.brightGreen}    Updated!${ansi.reset}\r\n`);
@@ -1839,6 +2458,11 @@ class BBSSession {
   finalizeSession(action) {
     if (this.sessionEnded) return false;
     this.sessionEnded = true;
+
+    if (this.activeDoorRun) {
+      try { this.activeDoorRun.finish(); } catch {}
+    }
+    this.activeDoorRun = null;
 
     if (this.callLogId) {
       db.callLog.logLogout(this.callLogId);
