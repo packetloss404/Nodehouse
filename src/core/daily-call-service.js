@@ -2,9 +2,11 @@ const database = require('./database');
 
 function createDailyCallService(store = database) {
   return {
-    snapshot(user, accessibleBases, { since = null, currentCallLogId = null } = {}) {
+    snapshot(user, accessibleBases, { since = null, currentCallLogId = null, firstCall = false } = {}) {
       if (!user || !user.id || !user.username) throw new Error('A caller identity is required.');
-      const timestamp = since ?? user.last_call_date ?? null;
+      // A first call has no "since" reference, so count the full board; otherwise
+      // fall back to the caller's stored last call when none was supplied.
+      const timestamp = firstCall ? null : (since ?? user.last_call_date ?? null);
       const baseIds = (accessibleBases || []).map((base) => Number(base.id ?? base))
         .filter(Number.isInteger);
       const subscriptions = store.readerSubscriptions.ensure(user.id, baseIds)

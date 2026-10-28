@@ -36,14 +36,14 @@ The [traditional BBS research and loop design](docs/TRADITIONAL-BBS-RESEARCH.md)
 - **Polls & Voting Booth** — Interactive polls with one-vote-per-user enforcement (DB-level unique constraint) and results rendered as percentage ASCII bar charts
 - **TeleChat** — 3 live rooms with real cross-node message relay scoped per room, join/leave announcements, and `/W` who's-here
 - **One-Liners** — A compact caller wall; usernames are ANSI-stripped before display
-- **Front Porch & Caller Cards** — Expiring notices, events, classifieds, help-wanted posts, the AutoMessage, and an alias-first directory; profiles are hidden until their caller explicitly opts in
+- **Front Porch & Caller Cards** — Expiring notices, events, classifieds, and help-wanted cards that callers can file (each enters moderation), a seeded AutoMessage, and a searchable alias-first directory; profiles are hidden until their caller explicitly opts in
 - **Node Lobby** — Presence with Available/Away/Busy/DND states, consent-based caller pages and private node chat, plus durable telegram fallback through local E-Mail
 - **Vibe Community** — Grouped boards for AI-assisted building, agents, prompts, and experimental workflows
 - **5 Persistent Door Games** — Trusted registry, daily launch allowances, bounded saves, completed-run scoring, and league tables; season storage is ready for scheduled competitions
 - **Packet Briefcase & QWK/REP** — One-time, expiring browser transfers export readable offline packets and import bounded replies; ZIP traversal, expansion, replay, conference access, and reply-parent checks guard the boundary
 - **SysOp Control Desk** — Role-separated moderator/SysOp permissions, profile and porch review, moderation queue, bounded audit history, MOTD/bulletin/user/message controls, node monitoring, and a token-authenticated dashboard
 - **File Libraries** — 4 browsable catalog areas for utilities, text files, caller uploads, and ANSI art (listing/catalog; transfer not yet wired)
-- **Persistent Storage** — SQLite (better-sqlite3, WAL mode, 14 tables) with scrypt-hashed passwords and call logging
+- **Persistent Storage** — SQLite (better-sqlite3, WAL mode, 28 tables) with scrypt-hashed passwords and call logging
 - **Deployment Guardrails** — Docker- and Railway-aware HTTP/Telnet ports, database health checks, secure production bootstrap, bounded login/registration/admin attempts, origin-checked WebSockets, CI, and end-to-end listener smoke tests
 
 ## Roadmap Summary
@@ -82,9 +82,12 @@ On a fresh local development database, `.env.example` permits the development-on
 Validate the codebase with the same syntax-and-test loop used for this milestone:
 
 ```bash
-npm run verify
-npm run smoke
+npm run verify        # syntax check + unit tests + end-to-end tests
+npm run smoke         # local HTTP + Telnet release smoke
+npm run test:browser  # Playwright: web terminal + SysOp panel (needs Chromium)
 ```
+
+`npm run verify` boots the real server for the end-to-end suite. The browser suite needs a one-time `npx playwright install chromium`.
 
 See [docs/OPERATIONS.md](docs/OPERATIONS.md) before exposing the board publicly. It records the Docker and Railway persistence, backup, recovery, release, and public-smoke contracts.
 
@@ -101,6 +104,18 @@ docker compose logs --tail=100 nodehouse
 ```
 
 Put an HTTP reverse proxy in front of `8088`; WebSocket upgrades use the same endpoint. Raw Telnet must be forwarded directly as TCP and is intentionally plaintext.
+
+## Testing
+
+Three suites, all runnable locally and in CI:
+
+| Command | What it covers |
+|---------|----------------|
+| `npm test` | Unit/service tests plus end-to-end tests that boot the real server on ephemeral ports and drive the Telnet and WebSocket transports (`test/e2e/`) |
+| `npm run test:browser` | Playwright: the xterm.js web terminal, the browser login/logoff flow, and the SysOp control desk (`test/browser/`) |
+| `npm run smoke` | A release smoke of `/healthz`, the web terminal shell, and the Telnet welcome banner |
+
+`npm run verify` runs the syntax check and `npm test`. The shared end-to-end harness lives in `test/helpers/` and is documented in `test/helpers/README.md`.
 
 ## Screenshots (What You'll See)
 
@@ -128,10 +143,10 @@ The main menu provides access to all BBS functions:
 │  [N] New Message Scan     [L] Last Callers           │
 │  [W] Who's Online         [V] Voting Booth           │
 │  [O] One-Liners           [Y] Your Settings          │
+│  [P] Page SysOp           [S] System Information     │
 │  [H] Front Porch          [I] Node Lobby             │
-│  [A] ANSI Gallery         [K] Offline Packets        │
-│  [Z] Daily Call           [P] Page SysOp             │
-│  [S] System Information   [X] Menu Mode              │
+│  [A] ANSI Art Gallery     [K] Packet Briefcase       │
+│  [Z] Daily Call           [X] Menu Mode              │
 │  [G] Goodbye / Logoff                                │
 └──────────────────────────────────────────────────────┘
 ```
@@ -173,7 +188,7 @@ The message menu renders section headings from `config.json`. General Discussion
 ## Daily Call, Front Porch, and Node Lobby
 
 - **Daily Call (`Z`)** presents a repeatable check-in across unread local mail, the caller's subscribed conferences, bulletins, new files, recent callers, and current polls.
-- **Front Porch (`H`)** collects expiring community notices, events, classifieds, help-wanted posts, and the AutoMessage. Caller submissions enter moderation; operator posts can publish directly.
+- **Front Porch (`H`)** collects expiring community notices, events, classifieds, and help-wanted cards, plus the AutoMessage seeded on a fresh board. A caller can file any of the four card types and each submission enters moderation; operator posts can publish directly.
 - **Caller Cards** expose a searchable handle-first directory with optional bio, interests, favorites, and ANSI avatar. New and migrated profiles are private until the caller opts in.
 - **Node Lobby (`I`)** adds Available, Away, Busy, and DND presence, caller-to-caller page requests, accepted private chat, and one-line telegrams. An unavailable recipient receives the telegram as durable local E-Mail.
 
@@ -227,7 +242,7 @@ Doors launch only from a trusted first-party registry. Vibe Wars, Prompt Quest, 
 ### 🚀 Vibe Wars
 *Inspired by TradeWars 2002*
 
-Intergalactic AI resource trading across 8 sectors with a per-sector price model and volatility. Buy and sell GPU Cores, Training Data, Model Weights, API Tokens, Prompt Packs, and VRAM Chips. Navigate probabilistic pirate encounters, manage fuel, cargo, and hull, and maximize your fortune in 30 turns with end-of-game scoring.
+Intergalactic AI resource trading across 8 sectors with a per-sector price model and volatility. Prices hold steady for as long as you stay in a sector and re-roll when you arrive somewhere new, so a quoted price is the price you pay. Buy and sell GPU Cores, Training Data, Model Weights, API Tokens, Prompt Packs, and VRAM Chips. Navigate probabilistic pirate encounters, manage fuel, cargo, and hull, and maximize your fortune in 30 turns with end-of-game scoring.
 
 ### ⚔️ Prompt Quest
 *Inspired by Legend of the Red Dragon*
@@ -388,7 +403,12 @@ Nodehouse/
 │   ├── services/              # Door, packet, and ANSI-gallery services
 │   └── web/
 │       └── index.html         # Browser terminal (xterm.js)
-├── test/                       # Branding, database, terminal, and caller-loop tests
+├── test/                       # Unit tests plus end-to-end and browser suites
+│   ├── *.test.js               # Unit/service tests (node:test)
+│   ├── e2e/                    # End-to-end tests over real Telnet + WebSocket
+│   ├── browser/                # Playwright specs (web terminal + admin panel)
+│   └── helpers/                # Shared E2E harness (board + transport clients)
+├── playwright.config.js
 ├── docs/
 │   ├── OPERATIONS.md          # Railway, backups, recovery, and release gate
 │   └── TRADITIONAL-BBS-RESEARCH.md

@@ -43,7 +43,13 @@ _Findings from a 2026-07-17 code audit, preserved for later._
 - **[low/L]** File libraries are list-only — `handleFileList` returns to the library selector, with no upload/download transfer
   - Real file transfer over Telnet/WebSocket (list contents, download/upload, protocol) is a substantial feature; `config.json` already defines file-library directories. Incomplete feature, not a defect.
 - **[low/M]** Extend end-to-end coverage
-  - The suite now covers reader state, threads/search, drafts/signatures, Daily Call, community moderation, node paging, packet codecs, gallery safety, persistent-door contracts, database migration, and transport guardrails. Next targets are full terminal walks through each new room, packet HTTP transfers, mail composition, and door return transitions.
+  - The suite now drives the real server end to end: the Telnet and WebSocket transports, reader/newscan, mail and live new-mail push, polls, the Front Porch and caller cards, the Node Lobby, all five doors, offline packets over HTTP, the admin REST API, deployment guardrails, multi-node broadcasts, and a real-browser Playwright pass over the web terminal and SysOp panel. Remaining targets: long multi-user soak runs, the interactive editor UX, and file-library transfer once it exists.
+- **[low/S]** QWK compatibility gaps
+  - `DOOR.ID` declares `CONTROLTYPE` without the `CONTROLNAME` the QWK spec requires alongside it, and `importRep` does not verify the packet `BBSID` (Nodehouse's own export writes none). `CONTROL.DAT` now carries the spec's total-message and conference-count lines. The remaining deviations are interop-only and do not affect Nodehouse's own QWK/REP round trip.
+- **[low/M]** Per-listener rate limits are independent
+  - Telnet and WebSocket each construct their own connection/login/registration limiters, so one source address can consume both budgets (for example 30 connections/min per transport rather than a combined 30). A shared limiter would be stronger; the current split is a hardening item, not a live defect.
+- **[low/S]** "Callers since last call" uses second-resolution timestamps
+  - The count compares `login_time` at one-second resolution, so a caller who logs in within the same wall-clock second as the caller's previous call is not counted. Exact enough for a social summary; a higher-resolution or id-based cursor would make it precise.
 
 ### Known limitations (deliberate — not planned)
 - /admin static HTML served without requireAuth; only /admin/api/* routes gated

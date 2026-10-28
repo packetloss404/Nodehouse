@@ -18,6 +18,36 @@ docker compose logs --tail=100 nodehouse
 
 Before an upgrade, use SQLite's online backup API or stop the container before copying the database. Preserve both `data/` and `files/`. After an upgrade, require a healthy container and run the public HTTP/Telnet smoke test. At the network edge, forward TCP/80 and TCP/443 to the reverse proxy and TCP/23 directly to the Docker host.
 
+## VPS service contract (current production)
+
+Production runs on a self-hosted VPS host rather than a managed platform. The live board is `https://bbs.packetloss404.com`, terminated by Caddy on the edge host and reverse-proxied to the Nodehouse container's port `8088`; raw Telnet is published directly on TCP `23`.
+
+- Application checkout: `/opt/stacks/packetbbs` (a Git clone of this repository on branch `main`).
+- Runtime: the `nodehouse:local` image built by the committed `compose.yaml`; one container named `nodehouse`, one replica.
+- Persistent state: `/opt/stacks/packetbbs/data` (SQLite) and `/opt/stacks/packetbbs/files` (file library).
+- Secrets: `/opt/stacks/packetbbs/.env` (untracked; never overwritten by a pull).
+
+Release procedure (run over SSH on the VPS host):
+
+```bash
+cd /opt/stacks/packetbbs
+sudo git pull --ff-only
+sudo docker compose up -d --build
+sudo docker compose ps
+sudo docker compose logs --tail=100 nodehouse
+```
+
+Then run the public smoke against the live endpoints:
+
+```powershell
+$env:NODEHOUSE_SMOKE_WEB_URL = 'https://bbs.packetloss404.com'
+$env:NODEHOUSE_SMOKE_TELNET_HOST = '<vps host>'
+$env:NODEHOUSE_SMOKE_TELNET_PORT = '23'
+npm run smoke
+```
+
+`git pull --ff-only` guarantees the deployment matches the reviewed commit; if it refuses, the checkout has drifted and must be inspected rather than force-updated.
+
 ## Railway service contract
 
 The committed `railway.json` requires one replica, a `/healthz` deployment health check, and a persistent volume mounted at `/app/data`. Nodehouse reads Railway's `PORT` for HTTP and keeps raw Telnet on a separate `TELNET_PORT` (or Railway's injected `RAILWAY_TCP_APPLICATION_PORT`).
@@ -67,8 +97,13 @@ Run from a clean checkout:
 npm ci
 npm run verify
 npm run smoke
+npm run test:browser
 npm audit --omit=dev --audit-level=high
 ```
+
+`npm run verify` checks every source file for syntax, runs the unit suite, and runs the end-to-end suite (`test/e2e/**/*.test.js`), which boots the real server on ephemeral ports and drives the Telnet and WebSocket transports.
+
+`npm run test:browser` runs the Playwright suite (`test/browser/**/*.spec.js`) against a real headless Chromium: the xterm.js web terminal, the login flow, and the SysOp control desk. Install the browser once with `npx playwright install chromium` (CI uses `--with-deps`).
 
 `npm run smoke` starts The Nodehouse against an isolated temporary SQLite database, checks `/healthz`, loads the web terminal, opens the Telnet listener, and shuts the process down.
 
@@ -112,7 +147,7 @@ Recovery procedure:
 - New caller and admin-reset passwords require at least eight characters.
 - Telnet is plaintext by design. Do not reuse a Nodehouse password on any other service.
 - Browser WebSockets accept same-origin requests plus explicit `NODEHOUSE_ALLOWED_ORIGINS` entries.
-- Login, registration, connection, request-size, and terminal-input limits are process-local safeguards. Put an internet-facing reverse proxy or platform protection in front of HTTP for broader abuse control.
+- Login, registration, connection, request-size, and terminal-input limits are process-local safeguards, and the Telnet and WebSocket listeners each carry their own budget rather than sharing one. Put an internet-facing reverse proxy or platform protection in front of HTTP for broader abuse control.
 
 ## Rollback
 

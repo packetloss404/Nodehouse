@@ -40,6 +40,11 @@ class DoorService {
       const saved = this.db.doors.getSave(session.user.id, definition.id);
       if (saved?.state) definition.restore(door, cloneSave(saved.state));
     }
+    // A door that cannot run (e.g. a sealed optional integration) is refused
+    // before an admission is charged, so it never burns a daily launch.
+    if (typeof definition.available === 'function' && !definition.available(session)) {
+      return { allowed: false, unavailable: true, definition };
+    }
     const admission = this.db.doors.beginRun(session.user.id, definition.id, definition.dailyRuns);
     if (!admission.allowed) {
       return { allowed: false, remaining: 0, definition };

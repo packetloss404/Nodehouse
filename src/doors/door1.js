@@ -39,6 +39,9 @@ class VibeWars {
       turnsLeft: 30,
       score: 0,
     };
+    // The current sector's market, rolled on arrival and held stable while the
+    // caller stays in the sector.
+    this.market = null;
     this.state = 'menu';
   }
 
@@ -114,8 +117,18 @@ ${d}    └───────────────────────
     this.session.prompt('Command: ');
   }
 
+  // Prices are rolled once when the caller arrives in a sector, then held
+  // stable for that visit so the displayed price is the price actually charged
+  // and a caller can plan a trade. Volatility now comes from sector-to-sector
+  // differences and from re-entering a sector later.
   getPrices(sectorId) {
-    // Deterministic-ish prices per sector with some randomness
+    if (!this.market || this.market.sectorId !== sectorId) {
+      this.market = { sectorId, prices: this.rollPrices(sectorId) };
+    }
+    return this.market.prices;
+  }
+
+  rollPrices(sectorId) {
     return COMMODITIES.map((comm, i) => {
       const sectorMod = ((sectorId * 37 + i * 13) % 60) - 30;
       const randomMod = Math.floor(Math.random() * comm.volatility) - comm.volatility / 2;

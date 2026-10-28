@@ -47,6 +47,10 @@ const registry = Object.freeze({
   dungeon_vibe_lords: {
     id: 'dungeon_vibe_lords', number: 5, name: 'Dungeon of the Vibe Lords', dailyRuns: 5,
     Door: require('./door5'), save: null, restore: null, // Door 5 owns its richer save/history store.
+    // A door that cannot actually run must not burn a daily launch. The service
+    // checks `available` before charging an admission.
+    available: () => Boolean(process.env.ANTHROPIC_API_KEY),
+    unavailableMessage: 'The Dungeon is sealed! (ANTHROPIC_API_KEY not configured)',
     score: door => ((door.player?.level || 1) * 1000) + (door.player?.xp || 0) + ((door.player?.deepest_floor || 1) * 100),
   },
 });

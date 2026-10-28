@@ -65,7 +65,9 @@ function parseExpiry(value, now = Date.now()) {
   const timestamp = Date.parse(value);
   if (!Number.isFinite(timestamp) || timestamp <= now) throw new TypeError('Expiry must be a future date');
   const latest = now + (180 * 24 * 60 * 60 * 1000);
-  return new Date(Math.min(timestamp, latest)).toISOString();
+  // Store in SQLite's canonical UTC 'YYYY-MM-DD HH:MM:SS' form so the expiry
+  // compares correctly against datetime('now') in the porch listing query.
+  return new Date(Math.min(timestamp, latest)).toISOString().slice(0, 19).replace('T', ' ');
 }
 
 class CommunityService {

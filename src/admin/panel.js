@@ -143,6 +143,8 @@ function setupAdminPanel(app, nodeManager, config) {
       });
     }
     const targetId = parseInt(req.params.id);
+    const target = db.users.getById(targetId);
+    if (!target) return res.status(404).json({ error: 'User not found' });
     db.users.resetPassword(targetId, req.body.password);
     community.recordAudit(req.adminActor, 'user.password_reset', 'user', req.params.id);
     invalidateUserSessions(targetId);
@@ -155,7 +157,8 @@ function setupAdminPanel(app, nodeManager, config) {
   });
 
   app.delete('/admin/api/messages/:id', requireAuth, (req, res) => {
-    db.messages.delete(parseInt(req.params.id));
+    const removed = db.messages.delete(parseInt(req.params.id));
+    if (!removed) return res.status(404).json({ error: 'Message not found' });
     community.recordAudit(req.adminActor, 'message.delete', 'message', req.params.id);
     res.json({ ok: true });
   });
@@ -175,13 +178,15 @@ function setupAdminPanel(app, nodeManager, config) {
   });
 
   app.delete('/admin/api/bulletins/:id', requireAuth, requirePermission('MANAGE_SYSTEM'), (req, res) => {
-    db.bulletins.delete(parseInt(req.params.id));
+    const removed = db.bulletins.delete(parseInt(req.params.id));
+    if (!removed) return res.status(404).json({ error: 'Bulletin not found' });
     community.recordAudit(req.adminActor, 'bulletin.delete', 'bulletin', req.params.id);
     res.json({ ok: true });
   });
 
   app.post('/admin/api/bulletins/:id/toggle', requireAuth, requirePermission('MANAGE_SYSTEM'), (req, res) => {
-    db.bulletins.toggle(parseInt(req.params.id));
+    const changed = db.bulletins.toggle(parseInt(req.params.id));
+    if (!changed) return res.status(404).json({ error: 'Bulletin not found' });
     community.recordAudit(req.adminActor, 'bulletin.toggle', 'bulletin', req.params.id);
     res.json({ ok: true });
   });
@@ -231,8 +236,11 @@ function setupAdminPanel(app, nodeManager, config) {
 
   app.post('/admin/api/community/porch/:id/moderate', requireAuth,
     requirePermission('MODERATE_COMMUNITY'), (req, res, next) => {
-      try { res.json(community.moderatePost(req.params.id, req.body.state, req.adminActor, req.body.reason)); }
-      catch (error) { next(error); }
+      try {
+        const post = community.moderatePost(req.params.id, req.body.state, req.adminActor, req.body.reason);
+        if (!post) return res.status(404).json({ error: 'Porch post not found' });
+        res.json(post);
+      } catch (error) { next(error); }
     });
 
   app.get('/admin/api/audit', requireAuth, (req, res) => {
@@ -244,7 +252,12 @@ function setupAdminPanel(app, nodeManager, config) {
 
   app.get('/admin/api/moderation', requireAuth, requirePermission('MODERATE_COMMUNITY'), (req, res) => {
     if (!db.moderationQueue) return res.status(503).json({ error: 'Moderation storage is unavailable' });
-    const state = req.query.state === 'all' ? null : cleanText(req.query.state || 'open', 24);
+    const allowed = new Set(['open', 'in_review', 'resolved', 'dismissed']);
+    const requestedState = req.query.state === undefined ? 'open' : cleanText(req.query.state, 24);
+    if (requestedState !== 'all' && !allowed.has(requestedState)) {
+      return res.status(400).json({ error: 'Unknown moderation state' });
+    }
+    const state = requestedState === 'all' ? null : requestedState;
     res.json(db.moderationQueue.list({ state, limit: Math.min(Math.max(parseInt(req.query.limit) || 100, 1), 250) }));
   });
 
@@ -603,8 +616,8 @@ async function loadControlDesk() {
     posts.forEach(p => {
       rows += '<tr><td>' + esc(p.notice_type) + '</td><td>' + esc(p.title) + '</td><td>' +
         esc(p.author_username) + '</td><td>' + esc(p.status) + '</td><td>' +
-        '<button class="btn" onclick="moderatePorch(' + p.id + ',\'active\')">Approve</button> ' +
-        '<button class="btn danger" onclick="moderatePorch(' + p.id + ',\'removed\')">Remove</button></td></tr>';
+        '<button class="btn" onclick="moderatePorch(' + p.id + ',\\'active\\')">Approve</button> ' +
+        '<button class="btn danger" onclick="moderatePorch(' + p.id + ',\\'removed\\')">Remove</button></td></tr>';
     });
     document.getElementById('porchTable').innerHTML = rows;
   }
@@ -619,8 +632,8 @@ async function loadControlDesk() {
     let rows = '<tr><th>Target</th><th>Reason</th><th>State</th><th>Actions</th></tr>';
     moderation.forEach(m => { rows += '<tr><td>' + esc(m.target_type + ':' + m.target_id) + '</td><td>' +
       esc(m.reason) + '</td><td>' + esc(m.state) + '</td><td><button class="btn" onclick="resolveReport(' +
-      m.id + ',\'resolved\')">Resolve</button> <button class="btn danger" onclick="resolveReport(' + m.id +
-      ',\'dismissed\')">Dismiss</button></td></tr>'; });
+      m.id + ',\\'resolved\\')">Resolve</button> <button class="btn danger" onclick="resolveReport(' + m.id +
+      ',\\'dismissed\\')">Dismiss</button></td></tr>'; });
     document.getElementById('moderationTable').innerHTML = rows;
   }
   if (Array.isArray(profiles)) {

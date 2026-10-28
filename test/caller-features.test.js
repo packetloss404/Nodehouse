@@ -151,6 +151,7 @@ test('caller experience connects daily reading, porch, nodes, art, doors, and pa
 
   bob.session.showFrontPorch();
   bob.session.processInput('P');
+  bob.session.processInput('N');
   bob.session.processInput('Modem swap this Saturday');
   bob.session.processInput('Bring a 56K modem or help somebody repair one.');
   const porchPost = database.porchPosts.list({ includeInactive: true })

@@ -36,22 +36,36 @@ function messageRecord(message, conferenceNumber) {
 }
 
 function exportQwk({ bbs = 'NODEHOUSE', city = '', phone = '', sysop = 'SysOp', user, conferences = [], messages = [] }) {
+  const pad = (value) => String(value).padStart(2, '0');
   const safeConferences = conferences.slice(0, 255).map((conference, index) => {
     const id = Number(conference.id);
     const number = Number.isSafeInteger(id) && id > 0 && id <= 65535 ? id : index + 1;
     return { id, number, name: String(conference.name || `Conference ${conference.id}`).slice(0, 12) };
   });
   const conferenceById = new Map(safeConferences.map(item => [item.id, item]));
-  const control = [bbs, city, phone, sysop, '00000,Nodehouse', new Date().toISOString().slice(0, 10), user || '', '', '0', String(safeConferences.length - 1)];
+  // Only messages that land in a listed conference are written, so the count on
+  // CONTROL.DAT line 10 matches the packet.
+  const included = messages.slice(0, 2000).filter((message) => conferenceById.has(Number(message.base_id)));
+
+  const now = new Date();
+  const packetDate = `${pad(now.getUTCMonth() + 1)}-${pad(now.getUTCDate())}-${String(now.getUTCFullYear()).slice(-2)}` +
+    `,${pad(now.getUTCHours())}:${pad(now.getUTCMinutes())}:${pad(now.getUTCSeconds())}`;
+  // QWK CONTROL.DAT layout: nine header lines, then line 10 = total messages in
+  // the packet, line 11 = number of conferences minus one, then the
+  // (number, name) conference pairs, then HELLO/NEWS/GOODBYE.
+  const control = [
+    bbs, city, phone, sysop, '00000,Nodehouse', packetDate, user || '', '', '0',
+    String(included.length),
+    String(safeConferences.length - 1),
+  ];
   for (const conference of safeConferences) control.push(String(conference.number), conference.name);
   control.push('HELLO', 'NEWS', 'GOODBYE');
 
   const header = Buffer.alloc(BLOCK, 0x20);
   field(header, 0, 128, `${bbs} QWK packet for ${user}`);
   const records = [header];
-  for (const message of messages.slice(0, 2000)) {
-    const conference = conferenceById.get(Number(message.base_id));
-    if (conference) records.push(messageRecord(message, conference.number));
+  for (const message of included) {
+    records.push(messageRecord(message, conferenceById.get(Number(message.base_id)).number));
   }
   const entries = [
     { name: 'CONTROL.DAT', data: `${control.join('\r\n')}\r\n` },

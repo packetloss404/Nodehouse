@@ -12,6 +12,17 @@ const LEGACY_DB_PATHS = [
 ];
 const MIN_BOOTSTRAP_PASSWORD_LENGTH = 12;
 
+// The default personal-newscan order is the configured message-base order, the
+// same order the [M] conference list shows. Every path that creates a
+// subscription row must agree on this, or a caller's default scan order drifts
+// with read history.
+const config = require('../../config.json');
+const DEFAULT_BASE_ORDER = new Map((config.messageBases || []).map((base, index) => [Number(base.id), index]));
+function defaultSortOrder(baseId) {
+  const order = DEFAULT_BASE_ORDER.get(Number(baseId));
+  return order === undefined ? Number(baseId) : order;
+}
+
 function resolveDatabasePath(env = process.env) {
   const configuredPath = env.NODEHOUSE_DB_PATH || env.PACKETBBS_DB_PATH;
   if (configuredPath) {
@@ -118,7 +129,7 @@ const seedContent = {
     motdBody: 'The Nodehouse is online. Check your mail, run a new-message scan,\r\n' +
       'browse the file libraries, and visit the doors.\r\n\r\n' +
       'Press ? at the Main prompt to redisplay the command menu.',
-    graffitiMessage: 'First caller on The Nodehouse one-liner board!',
+    graffitiMessage: 'First caller on The Nodehouse!',
   },
 };
 
@@ -571,6 +582,15 @@ function init() {
     // Seed graffiti wall
     db.prepare('INSERT INTO graffiti (username, message) VALUES (?, ?)').run('SysOp', seedContent.current.graffitiMessage);
 
+    // The AutoMessage is the porch card every caller sees automatically.
+    db.prepare(`
+      INSERT INTO porch_notices (author_user_id, notice_type, title, body, status, pinned)
+      VALUES ((SELECT id FROM users WHERE username = 'SysOp'), 'auto_message', ?, ?, 'active', 1)
+    `).run(
+      'Welcome to The Nodehouse',
+      'Read the Front Porch for community notices and events, then leave a card of your own. New callers are always welcome here.'
+    );
+
     db.prepare(`
       INSERT INTO messages (base_id, from_user, to_user, subject, body)
       VALUES (?, ?, ?, ?, ?)
@@ -865,7 +885,7 @@ const messages = {
         ON CONFLICT(user_id, base_id) DO UPDATE SET
           high_water_mark = MAX(high_water_mark, excluded.high_water_mark),
           updated_at = datetime('now')
-      `).run(userId, message.base_id, message.base_id, messageId);
+      `).run(userId, message.base_id, defaultSortOrder(message.base_id), messageId);
       return true;
     })();
   },
@@ -890,7 +910,7 @@ const messages = {
         ON CONFLICT(user_id, base_id) DO UPDATE SET
           high_water_mark = MAX(high_water_mark, excluded.high_water_mark),
           updated_at = datetime('now')
-      `).run(userId, baseId, baseId, max);
+      `).run(userId, baseId, defaultSortOrder(baseId), max);
       return { markedRead: result.changes, highWaterMark: max };
     })();
   },
@@ -927,7 +947,7 @@ const messages = {
 
   delete(id) {
     db.prepare('DELETE FROM message_read WHERE message_id = ?').run(id);
-    db.prepare('DELETE FROM messages WHERE id = ?').run(id);
+    return db.prepare('DELETE FROM messages WHERE id = ?').run(id).changes;
   }
 };
 
@@ -949,7 +969,7 @@ const readerSubscriptions = {
         (user_id, base_id, subscribed, sort_order, high_water_mark)
       VALUES (?, ?, 1, ?, 0)
     `);
-    db.transaction(() => ids.forEach((baseId, index) => insert.run(userId, baseId, index)))();
+    db.transaction(() => ids.forEach((baseId) => insert.run(userId, baseId, defaultSortOrder(baseId))))();
     return this.list(userId);
   },
 
@@ -1134,7 +1154,7 @@ const porchPosts = {
       SELECT n.*, u.username AS author_username FROM porch_notices n
       JOIN users u ON u.id = n.author_user_id
       WHERE (? IS NULL OR n.notice_type = ?)
-        AND (? = 1 OR (n.status = 'active' AND (n.expires_at IS NULL OR n.expires_at > datetime('now'))))
+        AND (? = 1 OR (n.status = 'active' AND (n.expires_at IS NULL OR datetime(n.expires_at) > datetime('now'))))
       ORDER BY n.pinned DESC, n.created_at DESC, n.id DESC LIMIT ? OFFSET ?
     `).all(type, type, includeInactive ? 1 : 0, boundedLimit(limit), Math.max(0, Number(offset) || 0));
   },
@@ -1220,11 +1240,11 @@ const bulletins = {
   },
 
   delete(id) {
-    db.prepare('DELETE FROM bulletins WHERE id = ?').run(id);
+    return db.prepare('DELETE FROM bulletins WHERE id = ?').run(id).changes;
   },
 
   toggle(id) {
-    db.prepare('UPDATE bulletins SET active = CASE WHEN active = 1 THEN 0 ELSE 1 END WHERE id = ?').run(id);
+    return db.prepare('UPDATE bulletins SET active = CASE WHEN active = 1 THEN 0 ELSE 1 END WHERE id = ?').run(id).changes;
   }
 };
 

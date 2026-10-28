@@ -29,7 +29,6 @@ const STATES = {
   MESSAGE_WRITE_TO: 'message_write_to',
   MESSAGE_WRITE_SUBJECT: 'message_write_subject',
   MESSAGE_WRITE_BODY: 'message_write_body',
-  MESSAGE_WRITE_CONFIRM: 'message_write_confirm',
   FILE_AREAS: 'file_areas',
   FILE_LIST: 'file_list',
   DOOR_GAMES: 'door_games',
@@ -284,9 +283,6 @@ class BBSSession {
       case STATES.MESSAGE_WRITE_BODY:
         this.handleMessageWriteBody(input);
         break;
-      case STATES.MESSAGE_WRITE_CONFIRM:
-        this.handleMessageWriteConfirm(input);
-        break;
       case STATES.FILE_AREAS:
         this.handleFileAreas(input);
         break;
@@ -329,7 +325,7 @@ class BBSSession {
         this.handleFrontPorch(input);
         break;
       case STATES.DIRECTORY:
-        this.showFrontPorch();
+        this.handleDirectory(input);
         break;
       case STATES.PROFILE_EDIT:
         this.handleProfileEdit(input);
@@ -1387,7 +1383,12 @@ class BBSSession {
     try {
       const launched = this.doorService.launch(this, doorNum);
       if (!launched.allowed) {
-        this.write(`${ansi.brightYellow}    Daily turns used. The door reopens tomorrow.${ansi.reset}\r\n`);
+        if (launched.unavailable) {
+          this.write(`${ansi.brightRed}    ${launched.definition.unavailableMessage || 'That door is not available right now.'}${ansi.reset}\r\n`);
+          this.write(`${ansi.brightYellow}    No daily turn was used.${ansi.reset}\r\n`);
+        } else {
+          this.write(`${ansi.brightYellow}    Daily turns used. The door reopens tomorrow.${ansi.reset}\r\n`);
+        }
         this.showDoorGames();
         return;
       }
@@ -1453,9 +1454,8 @@ class BBSSession {
     } else {
       for (const b of bulletins) {
         screen += `${d}    │  ${y}#${b.id} ${w}${b.title.padEnd(40)} ${g}${(b.created_at || '').substring(0, 10)}${d}│\r\n`;
-        const lines = b.body.split('\r\n');
-        for (const line of lines) {
-          screen += `${d}    │  ${c}${line.substring(0, 52).padEnd(52)}${d}│\r\n`;
+        for (const line of ansi.wrapText(b.body, 52)) {
+          screen += `${d}    │  ${c}${line.padEnd(52)}${d}│\r\n`;
         }
         screen += `${d}    │${'─'.repeat(54)}│\r\n`;
       }
@@ -1524,7 +1524,9 @@ class BBSSession {
     this.state = STATES.DAILY_CALL;
     this.nodeManager.setActivity(this.nodeNum, 'Daily Call');
     const report = this.dailyCall.snapshot(this.user, this.getAccessibleMessageBases(), {
-      since: this.stateData.previousLastCall || null, currentCallLogId: this.callLogId,
+      since: this.stateData.previousLastCall || null,
+      firstCall: !this.stateData.previousLastCall,
+      currentCallLogId: this.callLogId,
     });
     this.write(ansi.clear + `${ansi.brightCyan}    NODEHOUSE // THE DAILY CALL${ansi.reset}\r\n`);
     this.write(`${ansi.cyan}    --------------------------------------------------------${ansi.reset}\r\n`);
@@ -1575,23 +1577,34 @@ class BBSSession {
       this.prompt('Card as display name | interests | short bio: '); return;
     }
     if (cmd === 'P') {
-      this.stateData.porchDraft = { stage: 'title' };
+      this.stateData.porchDraft = { stage: 'type' };
       this.state = STATES.PORCH_POST;
-      this.prompt('Notice title: '); return;
+      this.prompt('Card type [N]otice [E]vent [C]lassified [H]elp wanted: '); return;
     }
     this.showFrontPorch();
   }
 
-  showDirectory() {
+  showDirectory(query = '') {
     this.state = STATES.DIRECTORY;
-    const callers = this.community.directory({ limit: 30 });
+    const search = String(query || '').trim();
+    this.stateData.directoryQuery = search;
+    const callers = this.community.directory({ search, limit: 30 });
     this.write(ansi.clear + `${ansi.brightCyan}    NODEHOUSE // HOUSE DIRECTORY${ansi.reset}\r\n`);
-    if (!callers.length) this.write(`${ansi.brightYellow}    No callers have opted into the directory yet.${ansi.reset}\r\n`);
+    if (search) this.write(`${ansi.cyan}    Search: ${search}${ansi.reset}\r\n`);
+    if (!callers.length) {
+      this.write(`${ansi.brightYellow}    ${search ? 'No callers match that search.' : 'No callers have opted into the directory yet.'}${ansi.reset}\r\n`);
+    }
     for (const caller of callers) {
       this.write(`${ansi.brightYellow}    ${String(caller.username).slice(0, 18).padEnd(19)}${ansi.brightWhite}${String(caller.display_name || '').slice(0, 24)}${ansi.reset}\r\n`);
       if (caller.interests) this.write(`${ansi.cyan}      ${String(caller.interests).slice(0, 64)}${ansi.reset}\r\n`);
     }
-    this.write(ansi.pausePrompt);
+    this.prompt('Directory search (Enter = all, Q = back): ');
+  }
+
+  handleDirectory(input) {
+    const cmd = String(input || '').trim();
+    if (cmd.toUpperCase() === 'Q') { this.showFrontPorch(); return; }
+    this.showDirectory(cmd);
   }
 
   handleProfileEdit(input) {
@@ -1604,11 +1617,17 @@ class BBSSession {
   handlePorchPost(input) {
     const draft = this.stateData.porchDraft;
     if (!draft || !input) { this.showFrontPorch(); return; }
+    if (draft.stage === 'type') {
+      const types = { N: 'notice', E: 'event', C: 'classified', H: 'help_wanted' };
+      draft.type = types[String(input).toUpperCase()] || 'notice';
+      draft.stage = 'title';
+      this.prompt('Card title: '); return;
+    }
     if (draft.stage === 'title') {
-      draft.title = input; draft.stage = 'body'; this.prompt('Notice text: '); return;
+      draft.title = input; draft.stage = 'body'; this.prompt('Card text: '); return;
     }
     const post = this.community.createPorchPost({ id: this.user.id, access_level: this.user.access_level },
-      { type: 'notice', title: draft.title, body: input });
+      { type: draft.type || 'notice', title: draft.title, body: input });
     this.stateData.porchDraft = null;
     this.write(`${ansi.brightGreen}    Porch card ${post.status === 'pending' ? 'sent to the moderation desk' : 'posted'}.${ansi.reset}\r\n`);
     this.showFrontPorch();
@@ -1855,14 +1874,20 @@ class BBSSession {
     this.write(`\r\n${ansi.brightYellow}    *** Paging SysOp... ***${ansi.reset}\r\n`);
     this.write(`${ansi.brightCyan}    The SysOp has been notified. Please wait...${ansi.reset}\r\n`);
 
-    // Notify sysop nodes
+    // Notify online SysOps and report honestly whether anyone actually got it.
+    let notified = 0;
     for (const [nodeNum, node] of this.nodeManager.nodes) {
-      if (node.session && node.session.user && node.session.user.access_level >= 200) {
+      if (nodeNum !== this.nodeNum && node.session && node.session.user && node.session.user.access_level >= 200) {
         node.session.write(`\r\n${ansi.brightRed}${ansi.blink}    *** ${this.user.username} on Node ${this.nodeNum} is paging you! ***${ansi.reset}\r\n`);
+        notified += 1;
       }
     }
 
-    this.write(`${ansi.brightWhite}    SysOp is not available right now. Try again later!${ansi.reset}\r\n`);
+    if (notified > 0) {
+      this.write(`${ansi.brightGreen}    Your page was delivered to ${notified} online SysOp${notified === 1 ? '' : 's'}.${ansi.reset}\r\n`);
+    } else {
+      this.write(`${ansi.brightWhite}    No SysOp is online right now. Try again later!${ansi.reset}\r\n`);
+    }
     this.write(ansi.pausePrompt);
   }
 
@@ -2413,8 +2438,12 @@ class BBSSession {
       const validOption = options.find(o => o.id === optionId);
 
       if (validOption) {
-        db.polls.vote(poll.id, optionId, this.user.id);
-        this.write(`\r\n${ansi.brightGreen}    Vote recorded! Thank you for voting.${ansi.reset}\r\n\r\n`);
+        const result = db.polls.vote(poll.id, optionId, this.user.id);
+        if (result && result.changes > 0) {
+          this.write(`\r\n${ansi.brightGreen}    Vote recorded! Thank you for voting.${ansi.reset}\r\n\r\n`);
+        } else {
+          this.write(`\r\n${ansi.brightYellow}    You have already voted in this poll.${ansi.reset}\r\n\r\n`);
+        }
         this.showPollView();
         return;
       }
@@ -2441,9 +2470,8 @@ class BBSSession {
       `${d}    │${y}              ── Message of the Day ──                 ${d}│\r\n` +
       `${d}    ├──────────────────────────────────────────────────────┤\r\n`;
 
-    const lines = (motdEntry.body || '').split('\r\n');
-    for (const line of lines) {
-      screen += `${d}    │  ${w}${line.substring(0, 52).padEnd(52)}${d}│\r\n`;
+    for (const line of ansi.wrapText(motdEntry.body || '', 52)) {
+      screen += `${d}    │  ${w}${line.padEnd(52)}${d}│\r\n`;
     }
 
     screen += `${d}    │  ${g}                          - ${c}${(motdEntry.author || 'SysOp').padEnd(22)} ${d}│\r\n`;

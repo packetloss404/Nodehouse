@@ -237,7 +237,7 @@ ansi.art.mainMenu = (status = {}) => {
     framedRow(d, `  ${y}[${w}W${y}]${c} Who's Online         ${y}[${w}V${y}]${c} Voting Booth`),
     framedRow(d, `  ${y}[${w}O${y}]${c} One-Liners           ${y}[${w}Y${y}]${c} Your Settings`),
     framedRow(d, `  ${y}[${w}P${y}]${c} Page SysOp           ${y}[${w}S${y}]${c} System Information`),
-    framedRow(d, `  ${y}[${w}H${y}]${c} Front Porch          ${y}[${w}I${y}]${c} Node Pages`),
+    framedRow(d, `  ${y}[${w}H${y}]${c} Front Porch          ${y}[${w}I${y}]${c} Node Lobby`),
     framedRow(d, `  ${y}[${w}A${y}]${c} ANSI Art Gallery     ${y}[${w}K${y}]${c} Packet Briefcase`),
     framedRow(d, `  ${y}[${w}Z${y}]${c} Daily Call           ${y}[${w}X${y}]${c} Menu Mode`),
     framedRow(d, `  ${y}[${w}G${y}]${c} Goodbye / Logoff`),
