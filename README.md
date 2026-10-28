@@ -26,7 +26,7 @@ The [traditional BBS research and loop design](docs/TRADITIONAL-BBS-RESEARCH.md)
 
 ## Features
 
-- **Hybrid Access** — Raw Telnet server (TCP 2323, real IAC negotiation) + browser web terminal (xterm.js over WebSocket) with CRT scanline effect, both driving one `BBSSession` engine
+- **Hybrid Access** — Raw Telnet server (TCP 2323, real IAC negotiation) plus a browser terminal you dial into (modem log, carrier tone, CRT glow) over WebSocket, both driving one `BBSSession` engine
 - **Multi-Node Concurrency** — Up to 16 simultaneous users with cross-protocol broadcasts: login/logout/disconnect notices, SysOp pages, and new-mail alerts reach online users regardless of how they connected
 - **Traditional Caller Loop & Daily Call** — “Since Your Last Call” plus a guided `Z` route covering mail, subscribed conferences, bulletins, files, callers, and polls; deliberate logoff and persisted novice/expert/super menu modes remain intact
 - **ANSI Art UI & Gallery** — Full-color menus plus a curated, metadata-aware gallery of original 80-column `.ans` screens; unsafe terminal controls and oversized artwork are rejected
@@ -76,6 +76,11 @@ Then connect:
 | Web Terminal | http://localhost:8088 |
 | Admin Panel | http://localhost:8088/admin |
 | Telnet | `telnet localhost 2323` |
+
+The browser terminal is a dial-in: the landing card holds the line open with a
+modem log and a carrier tone, and the session begins only when you press **DIAL
+IN**. Sound is mutable, and a redial button appears after `NO CARRIER`. Raw
+Telnet remains the no-nonsense path for a real terminal.
 
 On a fresh local development database, `.env.example` permits the development-only login `SysOp` / `sysop`. A fresh production or Railway database instead requires `NODEHOUSE_SYSOP_PASSWORD` with at least 12 characters; The Nodehouse will not start with the known default.
 

@@ -33,6 +33,7 @@
 - End-to-end suite (`test/e2e/`) that boots the real server on ephemeral ports and drives the Telnet, WebSocket, HTTP, and admin REST surfaces across the advertised features.
 - Real-browser Playwright suite (`test/browser/`) for the web terminal and the SysOp panel, wired into CI.
 - Shared end-to-end harness (`test/helpers/board.js`) with Telnet and WebSocket clients.
+- The browser terminal is now reached by a deliberate dial-in step: a landing card with a modem log and a synthesized carrier tone, a CRT glow, a mutable sound toggle, and a redial button after `NO CARRIER`. No session is created until the caller dials.
 
 ### Changed
 - `npm test` runs `test/**/*.test.js`; added `npm run test:e2e` and `npm run test:browser`.

@@ -18,6 +18,7 @@
     body {
       position: relative;
       font-family: 'Courier New', monospace;
+      color: #00ff88;
     }
     #terminal-container {
       position: fixed;
@@ -29,6 +30,7 @@
       padding: clamp(4px, 0.75vw, 12px);
       background: #0a0a0a;
     }
+    #terminal-container[hidden] { display: none; }
     #terminal,
     #terminal .xterm {
       width: 100%;
@@ -41,6 +43,79 @@
     #terminal .xterm-viewport::-webkit-scrollbar {
       display: none;
     }
+
+    /* ── Dial-in landing ───────────────────────────────── */
+    #dialin {
+      position: fixed;
+      inset: 0;
+      z-index: 1002;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      background: radial-gradient(120% 90% at 50% 40%, #06130c 0%, #0a0a0a 70%);
+    }
+    #dialin[hidden] { display: none; }
+    .dialin-card {
+      width: min(420px, 100%);
+      padding: 26px 24px 20px;
+      border: 1px solid #1d3a2a;
+      border-radius: 10px;
+      background: rgba(8, 16, 12, 0.9);
+      text-align: center;
+      box-shadow: 0 0 60px rgba(0, 255, 136, 0.08);
+    }
+    .dialin-brand {
+      font-size: clamp(20px, 5vw, 27px);
+      letter-spacing: 0.18em;
+      text-shadow: 0 0 12px rgba(0, 255, 136, 0.45);
+    }
+    .dialin-sub { margin-top: 6px; color: #4f7d66; font-size: 12px; letter-spacing: 0.12em; }
+    .dialin-log {
+      margin: 20px 0 16px;
+      min-height: 3.4em;
+      font-size: 12.5px;
+      line-height: 1.6;
+      color: #7fe6b6;
+      text-align: left;
+      white-space: pre-wrap;
+    }
+    .dialin-log .dim { color: #3d6b56; }
+    .dialin-btn {
+      width: 100%;
+      padding: 13px 16px;
+      font: inherit;
+      font-size: 15px;
+      letter-spacing: 0.14em;
+      color: #06130c;
+      background: #00ff88;
+      border: 0;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+    .dialin-btn:hover { background: #00bfff; }
+    .dialin-btn:disabled { opacity: 0.5; cursor: default; }
+    .dialin-foot {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-top: 14px;
+      font-size: 11px;
+      color: #3d6b56;
+    }
+    .dialin-mute {
+      padding: 4px 9px;
+      border: 1px solid #1d3a2a;
+      border-radius: 999px;
+      background: none;
+      color: #4f7d66;
+      font: inherit;
+      font-size: 11px;
+      cursor: pointer;
+    }
+    .dialin-mute[aria-pressed="true"] { color: #ff9d5c; border-color: #5c3a1d; }
+
     #status {
       position: fixed;
       right: max(8px, env(safe-area-inset-right));
@@ -57,6 +132,22 @@
     }
     #status.connected { color: #00ff88; }
     #status.disconnected { color: #ff4444; }
+    #redial {
+      position: fixed;
+      left: max(8px, env(safe-area-inset-left));
+      bottom: max(8px, env(safe-area-inset-bottom));
+      z-index: 1001;
+      display: none;
+      padding: 7px 13px;
+      border: 1px solid #2a2a2a;
+      border-radius: 999px;
+      background: rgba(10, 10, 10, 0.9);
+      color: #00ff88;
+      font: inherit;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    #redial.show { display: block; }
     .scanline {
       position: fixed;
       top: 0; left: 0; right: 0; bottom: 0;
@@ -70,14 +161,44 @@
       );
       z-index: 1000;
     }
+    .crt-glow {
+      position: fixed;
+      inset: 0;
+      z-index: 1000;
+      pointer-events: none;
+      background: radial-gradient(120% 120% at 50% 50%, transparent 55%, rgba(0,0,0,0.35) 100%);
+    }
+    @media (prefers-reduced-motion: no-preference) {
+      .scanline { animation: crt-flicker 6s steps(60) infinite; }
+      @keyframes crt-flicker {
+        0%, 100% { opacity: 0.9; }
+        46% { opacity: 0.74; }
+        47% { opacity: 0.94; }
+      }
+    }
   </style>
 </head>
 <body>
-  <div id="terminal-container">
+  <div id="dialin">
+    <div class="dialin-card">
+      <div class="dialin-brand">THE NODEHOUSE</div>
+      <div class="dialin-sub">powered by Nodehouse</div>
+      <div class="dialin-log" id="dialinLog"><span class="dim">carrier idle — the line is open</span></div>
+      <button class="dialin-btn" id="dialinBtn" type="button">DIAL IN</button>
+      <div class="dialin-foot">
+        <span>2400 baud · 8N1</span>
+        <button class="dialin-mute" id="muteBtn" type="button" aria-pressed="false">sound: on</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="terminal-container" hidden>
     <div id="terminal"></div>
   </div>
-  <div id="status" role="status" aria-live="polite">Connecting...</div>
+  <div id="status" role="status" aria-live="polite">Off hook</div>
+  <button id="redial" type="button">Redial</button>
   <div class="scanline"></div>
+  <div class="crt-glow"></div>
 
   <script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/lib/xterm.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.10.0/lib/addon-fit.min.js"></script>
@@ -120,24 +241,140 @@
     term.loadAddon(new window.WebLinksAddon.WebLinksAddon());
 
     const container = document.getElementById('terminal');
-    term.open(container);
+    const containerEl = document.getElementById('terminal-container');
+    const statusEl = document.getElementById('status');
+    const dialinEl = document.getElementById('dialin');
+    const dialinLog = document.getElementById('dialinLog');
+    const dialinBtn = document.getElementById('dialinBtn');
+    const redialBtn = document.getElementById('redial');
+    const muteBtn = document.getElementById('muteBtn');
+
+    let ws = null;
+    let dialing = false;
+    let opened = false;
 
     let fitFrame;
     function fitTerminal() {
       cancelAnimationFrame(fitFrame);
+      if (!opened) return;
       fitFrame = requestAnimationFrame(() => fitAddon.fit());
     }
 
     const resizeObserver = new ResizeObserver(fitTerminal);
-    resizeObserver.observe(document.getElementById('terminal-container'));
+    resizeObserver.observe(containerEl);
     window.addEventListener('resize', fitTerminal);
     window.visualViewport?.addEventListener('resize', fitTerminal);
     document.fonts?.ready.then(fitTerminal);
     container.addEventListener('pointerdown', () => term.focus());
-    fitTerminal();
 
-    const statusEl = document.getElementById('status');
-    let ws;
+    // ── Carrier sound (short, quiet, and mutable) ───────
+    let audioCtx = null;
+    let muted = localStorage.getItem('nodehouse_mute') === '1';
+
+    function renderMute() {
+      muteBtn.textContent = muted ? 'sound: off' : 'sound: on';
+      muteBtn.setAttribute('aria-pressed', String(muted));
+    }
+    renderMute();
+
+    muteBtn.addEventListener('click', () => {
+      muted = !muted;
+      localStorage.setItem('nodehouse_mute', muted ? '1' : '0');
+      renderMute();
+      if (!muted) playCarrier();
+    });
+
+    function ensureAudio() {
+      if (muted) return null;
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      if (!Ctx) return null;
+      if (!audioCtx) audioCtx = new Ctx();
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+      return audioCtx;
+    }
+
+    function playCarrier() {
+      const ctx = ensureAudio();
+      if (!ctx) return;
+      const t0 = ctx.currentTime;
+      const master = ctx.createGain();
+      master.gain.value = 0.14;
+      master.connect(ctx.destination);
+
+      const tone = (freq, start, dur, gain) => {
+        const osc = ctx.createOscillator();
+        const g = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.value = freq;
+        g.gain.setValueAtTime(0, t0 + start);
+        g.gain.linearRampToValueAtTime(gain, t0 + start + 0.02);
+        g.gain.setValueAtTime(gain, t0 + start + dur - 0.03);
+        g.gain.linearRampToValueAtTime(0, t0 + start + dur);
+        osc.connect(g); g.connect(master);
+        osc.start(t0 + start); osc.stop(t0 + start + dur + 0.02);
+      };
+
+      // Dial tone, three DTMF digits, then the data handshake.
+      tone(350, 0, 0.55, 0.5);
+      tone(440, 0, 0.55, 0.5);
+      tone(697, 0.62, 0.1, 0.6); tone(1209, 0.62, 0.1, 0.6);
+      tone(770, 0.76, 0.1, 0.6); tone(1336, 0.76, 0.1, 0.6);
+      tone(852, 0.90, 0.1, 0.6); tone(1477, 0.90, 0.1, 0.6);
+
+      const noiseBuffer = ctx.createBuffer(1, Math.floor(ctx.sampleRate * 1.1), ctx.sampleRate);
+      const samples = noiseBuffer.getChannelData(0);
+      for (let i = 0; i < samples.length; i++) samples[i] = (Math.random() * 2 - 1) * 0.6;
+      const noise = ctx.createBufferSource();
+      noise.buffer = noiseBuffer;
+      const band = ctx.createBiquadFilter();
+      band.type = 'bandpass'; band.frequency.value = 1500; band.Q.value = 0.7;
+      const noiseGain = ctx.createGain();
+      noiseGain.gain.setValueAtTime(0, t0 + 1.0);
+      noiseGain.gain.linearRampToValueAtTime(0.5, t0 + 1.12);
+      noiseGain.gain.setValueAtTime(0.5, t0 + 1.9);
+      noiseGain.gain.linearRampToValueAtTime(0, t0 + 2.05);
+      noise.connect(band); band.connect(noiseGain); noiseGain.connect(master);
+      noise.start(t0 + 1.0); noise.stop(t0 + 2.1);
+    }
+
+    // ── Dial-in ritual, then the live session ───────────
+    function logLine(text, dim) {
+      const span = document.createElement('span');
+      if (dim) span.className = 'dim';
+      span.textContent = text + '\n';
+      dialinLog.appendChild(span);
+    }
+
+    async function dialIn() {
+      if (dialing) return;
+      dialing = true;
+      dialinBtn.disabled = true;
+      redialBtn.classList.remove('show');
+      dialinLog.textContent = '';
+      playCarrier();
+
+      const log = ['ATDT ' + location.host, 'DIALING...', 'CONNECT 2400'];
+      for (const line of log) {
+        logLine(line, line.startsWith('ATDT'));
+        await new Promise((resolve) => setTimeout(resolve, 520));
+      }
+
+      dialinEl.hidden = true;
+      containerEl.hidden = false;
+      term.open(container);
+      opened = true;
+      fitTerminal();
+      term.write('\x1b[2mCONNECT 2400 — The Nodehouse\x1b[0m\r\n\r\n');
+      statusEl.textContent = 'Carrier established';
+      statusEl.className = 'connected';
+      connect();
+
+      dialing = false;
+      dialinBtn.disabled = false;
+    }
+
+    dialinBtn.addEventListener('click', dialIn);
+    redialBtn.addEventListener('click', dialIn);
 
     function connect() {
       const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -153,9 +390,10 @@
       };
 
       ws.onclose = () => {
-        statusEl.textContent = 'Disconnected - Refresh to reconnect';
+        statusEl.textContent = 'NO CARRIER';
         statusEl.className = 'disconnected';
-        term.write('\r\n\x1b[91m--- Connection closed ---\x1b[0m\r\n');
+        term.write('\r\n\x1b[91mNO CARRIER\x1b[0m\r\n');
+        redialBtn.classList.add('show');
       };
 
       ws.onerror = () => {
@@ -169,8 +407,6 @@
         ws.send(data);
       }
     });
-
-    connect();
   </script>
 </body>
 </html>

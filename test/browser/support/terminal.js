@@ -68,6 +68,15 @@ async function typeLine(page, value) {
   await page.keyboard.press('Enter');
 }
 
+// The browser terminal is reached by a deliberate dial-in step; no session
+// exists until the caller takes it.
+async function openTerminal(page, baseUrl) {
+  await page.goto(baseUrl + '/');
+  await page.locator('#dialinBtn').click();
+  await expect(page.locator('#status')).toHaveText('Connected', { timeout: 20000 });
+  return page;
+}
+
 // Logs into the web terminal as the given caller and waits for the main prompt.
 async function terminalLogin(page, username, password) {
   await waitForTerminalText(page, /Username: /);
@@ -95,6 +104,7 @@ module.exports = {
   waitForTerminalText,
   waitForMoreOccurrences,
   typeLine,
+  openTerminal,
   terminalLogin,
   expectTerminalText,
 };
