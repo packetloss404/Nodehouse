@@ -29,8 +29,22 @@ test('HTTP serves the health check, web terminal, and admin panel', async () => 
   assert.equal(terminal.status, 200);
   const terminalHtml = await terminal.text();
   assert.match(terminalHtml, /The Nodehouse/);
-  assert.match(terminalHtml, /@xterm\/xterm/);
+  assert.match(terminalHtml, /\/vendor\/xterm\.js/);
   assert.match(terminalHtml, /\/ws/);
+  assert.doesNotMatch(terminalHtml, /cdn\.jsdelivr\.net/);
+
+  // The terminal bundle and its stylesheet are served by this process.
+  const xterm = await board.fetch('/vendor/xterm.js');
+  assert.equal(xterm.status, 200);
+  assert.match(xterm.headers.get('content-type') || '', /javascript/);
+  assert.ok((await xterm.text()).length > 100000, 'expected the full xterm bundle');
+
+  const xtermCss = await board.fetch('/vendor/xterm.css');
+  assert.equal(xtermCss.status, 200);
+  assert.match(xtermCss.headers.get('content-type') || '', /text\/css/);
+
+  const missingAsset = await board.fetch('/vendor/does-not-exist.js');
+  assert.equal(missingAsset.status, 404);
 
   const admin = await board.fetch('/admin');
   assert.equal(admin.status, 200);

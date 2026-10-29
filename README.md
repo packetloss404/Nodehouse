@@ -26,7 +26,7 @@ The [traditional BBS research and loop design](docs/TRADITIONAL-BBS-RESEARCH.md)
 
 ## Features
 
-- **Hybrid Access** — Raw Telnet server (TCP 2323, real IAC negotiation) plus a browser terminal you dial into (modem log, carrier tone, CRT glow) over WebSocket, both driving one `BBSSession` engine
+- **Hybrid Access** — Raw Telnet server (TCP 2323, real IAC negotiation) plus a browser terminal you dial into (modem log, carrier tone, CRT glow, self-hosted assets) over WebSocket, both driving one `BBSSession` engine
 - **Multi-Node Concurrency** — Up to 16 simultaneous users with cross-protocol broadcasts: login/logout/disconnect notices, SysOp pages, and new-mail alerts reach online users regardless of how they connected
 - **Traditional Caller Loop & Daily Call** — “Since Your Last Call” plus a guided `Z` route covering mail, subscribed conferences, bulletins, files, callers, and polls; deliberate logoff and persisted novice/expert/super menu modes remain intact
 - **ANSI Art UI & Gallery** — Full-color menus plus a curated, metadata-aware gallery of original 80-column `.ans` screens; unsafe terminal controls and oversized artwork are rejected
@@ -361,7 +361,7 @@ The SysOp account, welcome content, a sample poll, MOTD, and starter graffiti ar
 | Database | SQLite via better-sqlite3 (WAL) |
 | Web Server | Express |
 | WebSocket | ws |
-| Web Terminal | xterm.js v5.5.0 |
+| Web Terminal | xterm.js v5.5.0 (vendored, served from `/vendor`) |
 | Auth | scrypt (Node.js crypto) |
 | Protocol | Telnet (raw TCP via `net`) |
 

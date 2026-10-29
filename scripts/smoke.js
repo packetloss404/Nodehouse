@@ -41,7 +41,7 @@ async function waitForHealth(webUrl, child) {
 async function checkWebTerminal(webUrl) {
   const response = await fetch(new URL('/', webUrl));
   const body = await response.text();
-  if (!response.ok || !body.includes('The Nodehouse') || !body.includes('@xterm/xterm')) {
+  if (!response.ok || !body.includes('The Nodehouse') || !body.includes('/vendor/xterm.js')) {
     throw new Error(`Web terminal smoke failed with HTTP ${response.status}.`);
   }
 }

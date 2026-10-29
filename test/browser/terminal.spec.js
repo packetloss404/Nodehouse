@@ -49,6 +49,21 @@ test('the dial-in screen is a deliberate step before any session exists', async 
   expect(errors, `page errors: ${errors.join('; ')}`).toEqual([]);
 });
 
+test('the terminal works with the public CDN blocked', async ({ page }) => {
+  const cdnRequests = [];
+  await page.route(/cdn\.jsdelivr\.net/, (route) => {
+    cdnRequests.push(route.request().url());
+    return route.abort();
+  });
+
+  await openTerminal(page, board.baseUrl);
+  await waitForTerminalText(page, /THE NODEHOUSE/);
+  await waitForTerminalText(page, /Username: /);
+
+  // Every asset came from this board; nothing reached for the internet.
+  expect(cdnRequests).toEqual([]);
+});
+
 test('a caller can dial in, log in, navigate, and log off in the browser', async ({ page }) => {
   await openTerminal(page, board.baseUrl);
   await terminalLogin(page, 'SysOp', board.sysopPassword);

@@ -70,6 +70,12 @@ app.get('/healthz', (req, res) => {
   });
 });
 
+// Vendored browser assets (xterm.js and its addons). Serving them ourselves
+// keeps the terminal off a third-party CDN at runtime.
+app.use('/vendor', express.static(path.join(__dirname, 'src', 'web', 'vendor'), {
+  maxAge: '1h',
+}));
+
 // Serve the web terminal
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'src', 'web', 'index.html'));

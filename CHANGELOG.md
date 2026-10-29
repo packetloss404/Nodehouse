@@ -37,6 +37,7 @@
 
 ### Changed
 - `npm test` runs `test/**/*.test.js`; added `npm run test:e2e` and `npm run test:browser`.
+- The web terminal now serves xterm.js and its addons from `/vendor` instead of `cdn.jsdelivr.net`. The packages stay pinned as devDependencies, and a Playwright test proves the terminal works with the CDN blocked.
 - Updated the release gate and documented the VPS deployment contract in `docs/OPERATIONS.md`.
 - Production dependency audit is clean again (`express`, `body-parser`, and `proxy-addr` updated; `qs` pinned via an override).
 - Corrected README drift: main-menu labels, the database table count, and the deployment target.

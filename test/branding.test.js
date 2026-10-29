@@ -108,6 +108,13 @@ test('web terminal fills the viewport without visible scrollbar chrome', () => {
   assert.match(webTerminalHtml, /html,\s*body\s*{[^}]*overflow:\s*hidden/s);
   assert.match(webTerminalHtml, /#terminal-container\s*{[^}]*position:\s*fixed;[^}]*inset:\s*0;/s);
   assert.match(webTerminalHtml, /#terminal \.xterm-viewport::-webkit-scrollbar\s*{[^}]*display:\s*none;/s);
-  assert.match(webTerminalHtml, /@xterm\/addon-fit@0\.10\.0/);
   assert.match(webTerminalHtml, /fitAddon\.fit\(\)/);
+});
+
+test('the web terminal serves its own assets instead of a CDN', () => {
+  assert.match(webTerminalHtml, /\/vendor\/xterm\.js/);
+  assert.match(webTerminalHtml, /\/vendor\/xterm\.css/);
+  assert.match(webTerminalHtml, /\/vendor\/addon-fit\.js/);
+  assert.match(webTerminalHtml, /\/vendor\/addon-web-links\.js/);
+  assert.doesNotMatch(webTerminalHtml, /cdn\.jsdelivr\.net/);
 });
