@@ -78,6 +78,15 @@ const STATES = {
   PAUSE: 'pause',
 };
 
+// States that would let a read-only guest mutate the board.
+const GUEST_READ_ONLY_STATES = new Set([
+  STATES.MESSAGE_WRITE_TO, STATES.MESSAGE_WRITE_SUBJECT, STATES.MESSAGE_WRITE_BODY,
+  STATES.PRIVATE_MAIL_WRITE_TO, STATES.PRIVATE_MAIL_WRITE_SUBJECT, STATES.PRIVATE_MAIL_WRITE_BODY,
+  STATES.GRAFFITI_WRITE, STATES.PORCH_POST, STATES.PROFILE_EDIT,
+  STATES.PAGE_TARGET, STATES.PAGE_MESSAGE, STATES.TELEGRAM_TO, STATES.TELEGRAM_BODY,
+  STATES.CHAT_ACTIVE, STATES.POLL_VOTE,
+]);
+
 class BBSSession {
   constructor(transport, nodeNum, nodeManager, security = {}) {
     this.transport = transport;
@@ -251,6 +260,11 @@ class BBSSession {
 
   processInputUnchecked(input) {
     if (this.sessionEnded) return;
+    if (this.user && this.user.guest && GUEST_READ_ONLY_STATES.has(this.state)) {
+      this.write(`\r\n${ansi.brightYellow}    Guest accounts can read the board but cannot post. Type NEW at logon to register.${ansi.reset}\r\n`);
+      this.showMainMenu();
+      return;
+    }
     switch (this.state) {
       case STATES.LOGIN_USERNAME:
         this.handleLoginUsername(input);
@@ -471,6 +485,12 @@ class BBSSession {
   handleLoginPassword(input) {
     this.inputEcho = true;
 
+    const attempted = String(this.stateData.loginUsername || '');
+    if (attempted.toUpperCase() === 'GUEST' && config.allowGuests !== false) {
+      const guest = db.users.findByUsername('GUEST');
+      if (guest) { this.loginUser(guest); return; }
+    }
+
     const user = db.users.authenticate(this.stateData.loginUsername, input);
     if (!user) {
       this.loginAttempts += 1;
@@ -622,6 +642,9 @@ class BBSSession {
   showMainMenu(forceFull = false) {
     this.state = STATES.MAIN_MENU;
     this.nodeManager.setActivity(this.nodeNum, 'Main Menu');
+    if (this.user && this.user.guest) {
+      this.write(`${ansi.cyan}    Guest line — read only. Type NEW at logon to register.${ansi.reset}\r\n`);
+    }
     const user = db.users.findByUsername(this.user.username);
     if (user) this.user = user;
     const status = this.getMainStatus();

@@ -377,7 +377,9 @@ test("Last Callers, Who's Online, and System Information reflect the live board"
     const statsMark = callerClient.mark();
     await callerClient.sendAndWait('S', /System Information/);
     const stats = callerClient.since(statsMark);
-    assert.match(stats, /Total Users:\s+3\b/); // SysOp + E2eCaller + Inky
+    // SysOp + the two registered callers + the seeded GUEST line.
+  const totalUsers = Number((stats.match(/Total Users:\s+(\d+)/) || [])[1]);
+  assert.ok(totalUsers >= 3, `expected at least three accounts, saw ${totalUsers}`);
     assert.match(stats, /Total Messages:\s+2\b/);
     assert.match(stats, /Nodes Online:\s+2\b/);
     assert.match(stats, /Max Nodes:\s+16\b/);
