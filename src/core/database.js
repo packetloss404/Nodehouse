@@ -1727,7 +1727,21 @@ const offlinePackets = {
         messageCount: replies.length, metadata,
       });
       for (const reply of replies) {
-        messages.create(reply.baseId, username, 'All', reply.subject, reply.body, reply.replyTo ?? null);
+        // A private reply must never become a public post. Route it to local
+        // mail; a private reply with no usable recipient goes to the SysOp.
+        if (reply.private) {
+          const requested = String(reply.to || '').trim();
+          const recipient = requested && requested.toUpperCase() !== 'ALL'
+            ? users.findByUsername(requested)
+            : null;
+          if (!recipient && requested && requested.toUpperCase() !== 'ALL') {
+            throw new Error(`Private REP reply has an unknown recipient: ${requested}`);
+          }
+          const target = recipient ? recipient.username : config.sysopName;
+          privateMail.send(username, target, reply.subject, reply.body);
+          continue;
+        }
+        messages.create(reply.baseId, username, reply.to || 'All', reply.subject, reply.body, reply.replyTo ?? null);
       }
       if (replies.length > 0) {
         db.prepare('UPDATE users SET total_posts = total_posts + ? WHERE id = ?')
