@@ -9,6 +9,7 @@
   "newUserLevel": 10,
   "sysopLevel": 255,
   "allowNewUsers": true,
+  "allowGuests": true,
   "defaultTheme": "packet",
   "idleTimeout": 300,
   "idleTimeoutPreAuth": 60,

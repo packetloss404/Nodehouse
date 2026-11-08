@@ -366,6 +366,7 @@ function init() {
 
   // Additive compatibility for databases created before caller menu modes.
   ensureColumn('users', 'menu_mode', "TEXT NOT NULL DEFAULT 'NOVICE'");
+  ensureColumn('users', 'guest', 'INTEGER NOT NULL DEFAULT 0');
 
   // Reader continuity and extension tables are deliberately additive. Existing
   // local message IDs and message_read rows remain the canonical read state.
@@ -654,6 +655,7 @@ function init() {
       '4. Don\'t fight the suggestions - flow with them');
   }
 
+  ensureGuestAccount();
   migrateMessageIdentity();
   return db;
 }
@@ -687,6 +689,16 @@ function migrateMessageIdentity() {
       update.run(`nodehouse:local:${message.id}`, rootFor(message), message.id);
     }
   })();
+}
+
+function ensureGuestAccount() {
+  const existing = db.prepare("SELECT id FROM users WHERE username = 'GUEST' COLLATE NOCASE").get();
+  if (existing) return;
+  const { hash, salt } = hashPassword(crypto.randomBytes(24).toString('hex'));
+  db.prepare(`
+    INSERT INTO users (username, password_hash, password_salt, real_name, access_level, guest)
+    VALUES ('GUEST', ?, ?, 'Guest', 10, 1)
+  `).run(hash, salt);
 }
 
 function healthCheck() {
