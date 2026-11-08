@@ -107,8 +107,13 @@ function importRep(archive, conferenceMap) {
     const subject = textAt(messages, offset + 71, 25).slice(0, 80);
     const replyToText = textAt(messages, offset + 108, 8);
     const replyTo = /^\d+$/.test(replyToText) && Number(replyToText) > 0 ? Number(replyToText) : null;
+    // Byte 0 is the message status: '*' or '+' marks a private reply, and the
+    // To field carries the intended recipient. Both are caller-supplied, so the
+    // importer validates them rather than trusting them.
+    const isPrivate = messages[offset] === 0x2a || messages[offset] === 0x2b;
+    const to = textAt(messages, offset + 21, 25).slice(0, 40);
     if (!subject || !body) throw new Error('REP contains an empty reply.');
-    replies.push({ baseId, subject, body, replyTo });
+    replies.push({ baseId, subject, body, replyTo, private: isPrivate, to });
     block += count;
   }
   return replies;

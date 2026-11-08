@@ -237,7 +237,23 @@ function waitForExit(child, timeoutMs) {
 }
 
 // Boots a complete Nodehouse instance. Returns connection helpers and stop().
+// Ports are picked by opening and closing a probe socket, so two parallel test
+// files can occasionally choose the same one; retry rather than fail.
 async function startBoard(options = {}) {
+  let lastError;
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    try {
+      return await startBoardOnce(options);
+    } catch (error) {
+      lastError = error;
+      if (!/EADDRINUSE/.test(String(error && error.message))) throw error;
+      await delay(200 + attempt * 250);
+    }
+  }
+  throw lastError;
+}
+
+async function startBoardOnce(options = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'nodehouse-e2e-'));
   const webPort = await getFreePort();
   let telnetPort = await getFreePort();
