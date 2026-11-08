@@ -14,11 +14,33 @@ const PALETTES = Object.freeze({
   '03_sysop_den': ['\x1b[93m', '\x1b[33m', '\x1b[96m'],
   '04_packet_ship': ['\x1b[95m', '\x1b[96m', '\x1b[94m'],
 });
+// The CP437 high half (bytes 0x80-0xFF). This must be CP437, not CP850: the
+// two differ exactly in the box-drawing range, which is where BBS art lives.
 const CP437_HIGH =
   'ÇüéâäàåçêëèïîìÄÅÉæÆôöòûùÿÖÜ¢£¥₧ƒ' +
-  'áíóúñÑªº¿⌐¬½¼¡«»░▒▓│┤ÁÂÀ©╣║╗╝¢¥┐' +
-  '└┴┬├─┼ãÃ╚╔╩╦╠═╬¤ðÐÊËÈıÍÎÏ┘┌█▄¦Ì▀' +
-  'ÓßÔÒõÕµþÞÚÛÙýÝ¯´≡±‗¾¶§÷¸°¨·¹³²■ ';
+  'áíóúñÑªº¿⌐¬½¼¡«»░▒▓│┤╡╢╖╕╣║╗╝╜╛┐' +
+  '└┴┬├─┼╞╟╚╔╩╦╠═╬¤ðÐÊËÈıÍÎÏ┘┌█▄▌▐▀' +
+  'ÓßÔÒõÕµþÞÚÛÙýÝ¯´\u00ad±‗¾¶§÷¸°¨·¹³²■\u00a0';
+
+// SAUCE TFlags bit 0 means "iCE colours": the blink attribute is reused as a
+// bright background. Blink itself is never emitted either way.
+function applySauceColors(value, ice) {
+  return String(value).replace(/\x1b\[([0-9;]*)m/g, (match, params) => {
+    const parts = params === '' ? [] : params.split(';').map(Number);
+    if (!parts.includes(5)) return match;
+    const kept = [];
+    let background = null;
+    for (const part of parts) {
+      if (part === 5) continue;
+      if (part >= 40 && part <= 47) background = part;
+      kept.push(part);
+    }
+    if (ice && background !== null) {
+      kept[kept.indexOf(background)] = background + 60;
+    }
+    return `\x1b[${kept.join(';')}m`;
+  });
+}
 
 function decodeCp437(buffer) {
   let value = '';
@@ -36,6 +58,7 @@ function parseSauce(buffer) {
     title: text(7, 35), author: text(42, 20), group: text(62, 20), date: text(82, 8),
     fileSize: Math.min(declaredSize, buffer.length - 128), dataType: record[94], fileType: record[95],
     width: record.readUInt16LE(96) || 80, height: record.readUInt16LE(98) || 0,
+    flags: record[105] || 0,
   };
 }
 
@@ -108,7 +131,7 @@ class AnsiGallery {
     const sauce = parseSauce(buffer);
     const body = buffer.subarray(0, sauce ? sauce.fileSize : buffer.length);
     const content = (sauce ? decodeCp437(body) : body.toString('utf8')).replace(/\r?\n/g, '\r\n');
-    let clean = sanitizeAnsi(content);
+    let clean = applySauceColors(sanitizeAnsi(content), Boolean(sauce && (sauce.flags & 1)));
     for (const line of stripAnsi(clean).split('\r\n')) {
       if ([...line].length > 80) throw new Error('Artwork exceeds 80 columns.');
     }
