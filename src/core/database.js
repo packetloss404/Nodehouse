@@ -23,6 +23,41 @@ function defaultSortOrder(baseId) {
   return order === undefined ? Number(baseId) : order;
 }
 
+// A board day starts at the configured local reset hour, not at UTC midnight,
+// so a caller in UTC+10 does not get their door turns back at 10am.
+function doorDayKey(now = new Date(), resetHour = 0) {
+  const local = new Date(now.getTime());
+  const hour = Math.max(0, Math.min(23, Number(resetHour) || 0));
+  if (local.getHours() < hour) local.setDate(local.getDate() - 1);
+  const pad = (value) => String(value).padStart(2, '0');
+  return `${local.getFullYear()}-${pad(local.getMonth() + 1)}-${pad(local.getDate())}`;
+}
+
+// Lazily opens a season for a door when none is running, closing any that have
+// expired. Called from beginRun so there is no scheduler dependency.
+function ensureActiveSeason(doorKey, now = new Date()) {
+  const stamp = now.toISOString().slice(0, 19).replace('T', ' ');
+  const active = db.prepare(`
+    SELECT id FROM door_seasons
+    WHERE door_key = ? AND state = 'active'
+      AND datetime(starts_at) <= datetime(?) AND datetime(ends_at) > datetime(?)
+    ORDER BY datetime(starts_at) DESC LIMIT 1
+  `).get(doorKey, stamp, stamp);
+  if (active) return active;
+  db.prepare(`UPDATE door_seasons SET state = 'complete' WHERE door_key = ? AND state = 'active'`)
+    .run(doorKey);
+  const ends = new Date(now.getTime() + (30 * 24 * 60 * 60 * 1000))
+    .toISOString().slice(0, 19).replace('T', ' ');
+  db.prepare(`
+    INSERT INTO door_seasons (door_key, name, starts_at, ends_at, state, rules_json)
+    VALUES (?, ?, ?, ?, 'active', '{}')
+  `).run(doorKey, `${doorKey} ${stamp.slice(0, 10)}`, stamp, ends);
+  return db.prepare(`
+    SELECT id FROM door_seasons WHERE door_key = ? AND state = 'active'
+    ORDER BY datetime(starts_at) DESC LIMIT 1
+  `).get(doorKey);
+}
+
 function resolveDatabasePath(env = process.env) {
   const configuredPath = env.NODEHOUSE_DB_PATH || env.PACKETBBS_DB_PATH;
   if (configuredPath) {
@@ -1545,7 +1580,7 @@ const doors = {
     const limit = Math.max(1, Math.min(Number(dailyLimit) || 1, 10000));
     const key = String(doorId);
     return db.transaction(() => {
-      const date = db.prepare("SELECT date('now') AS date").get().date;
+      const date = doorDayKey(new Date(), Number(config.doorResetHour) || 0);
       db.prepare(`
         INSERT OR IGNORE INTO door_usage (user_id, door_key, usage_date) VALUES (?, ?, ?)
       `).run(userId, key, date);
@@ -1557,11 +1592,7 @@ const doors = {
         UPDATE door_usage SET turns_used = turns_used + 1, updated_at = datetime('now')
         WHERE user_id = ? AND door_key = ? AND usage_date = ?
       `).run(userId, key, date);
-      const season = db.prepare(`
-        SELECT id FROM door_seasons WHERE door_key = ? AND state = 'active'
-          AND starts_at <= datetime('now') AND ends_at > datetime('now')
-        ORDER BY starts_at DESC LIMIT 1
-      `).get(key);
+      const season = ensureActiveSeason(key);
       const runId = db.prepare(`
         INSERT INTO door_runs (user_id, door_key, season_id) VALUES (?, ?, ?)
       `).run(userId, key, season ? season.id : null).lastInsertRowid;
@@ -1781,4 +1812,5 @@ module.exports = {
   verifyPassword,
   resolveBootstrapSysopPassword,
   resolveDatabasePath,
+  doorDayKey,
 };
