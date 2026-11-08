@@ -241,7 +241,15 @@ function init() {
       username TEXT,
       login_time TEXT DEFAULT (datetime('now')),
       logout_time TEXT,
-      node_num INTEGER
+      node_num INTEGER,
+      transport TEXT NOT NULL DEFAULT '',
+      remote_addr_hash TEXT NOT NULL DEFAULT '',
+      duration_s INTEGER,
+      bytes_up INTEGER NOT NULL DEFAULT 0,
+      bytes_down INTEGER NOT NULL DEFAULT 0,
+      messages_posted INTEGER NOT NULL DEFAULT 0,
+      messages_read INTEGER NOT NULL DEFAULT 0,
+      end_reason TEXT NOT NULL DEFAULT ''
     );
 
     CREATE TABLE IF NOT EXISTS bulletins (
@@ -367,6 +375,15 @@ function init() {
   ensureColumn('messages', 'status', "TEXT NOT NULL DEFAULT 'accepted'");
   ensureColumn('private_mail', 'kind', "TEXT NOT NULL DEFAULT 'mail'");
   ensureColumn('private_mail', 'expires_at', 'TEXT');
+  // Call ledger: what happened on a call, not just that it happened.
+  ensureColumn('call_log', 'transport', "TEXT NOT NULL DEFAULT ''");
+  ensureColumn('call_log', 'remote_addr_hash', "TEXT NOT NULL DEFAULT ''");
+  ensureColumn('call_log', 'duration_s', 'INTEGER');
+  ensureColumn('call_log', 'bytes_up', 'INTEGER NOT NULL DEFAULT 0');
+  ensureColumn('call_log', 'bytes_down', 'INTEGER NOT NULL DEFAULT 0');
+  ensureColumn('call_log', 'messages_posted', 'INTEGER NOT NULL DEFAULT 0');
+  ensureColumn('call_log', 'messages_read', 'INTEGER NOT NULL DEFAULT 0');
+  ensureColumn('call_log', 'end_reason', "TEXT NOT NULL DEFAULT ''");
 
   db.exec(`
     CREATE UNIQUE INDEX IF NOT EXISTS idx_messages_global_id
@@ -1285,14 +1302,24 @@ const bulletins = {
 
 // Call log operations
 const callLog = {
-  logLogin(userId, username, nodeNum) {
+  logLogin(userId, username, nodeNum, meta = {}) {
+    const address = meta.remoteAddr
+      ? crypto.createHash('sha256').update(String(meta.remoteAddr)).digest('hex').slice(0, 32)
+      : '';
     return db.prepare(`
-      INSERT INTO call_log (user_id, username, node_num) VALUES (?, ?, ?)
-    `).run(userId, username, nodeNum).lastInsertRowid;
+      INSERT INTO call_log (user_id, username, node_num, transport, remote_addr_hash)
+      VALUES (?, ?, ?, ?, ?)
+    `).run(userId, username, nodeNum, String(meta.transport || ''), address).lastInsertRowid;
   },
 
-  logLogout(logId) {
-    db.prepare(`UPDATE call_log SET logout_time = datetime('now') WHERE id = ?`).run(logId);
+  logLogout(logId, { endReason = 'user_logoff' } = {}) {
+    db.prepare(`
+      UPDATE call_log
+      SET logout_time = datetime('now'),
+          duration_s = CAST((julianday('now') - julianday(login_time)) * 86400 AS INTEGER),
+          end_reason = ?
+      WHERE id = ?
+    `).run(String(endReason || 'user_logoff'), logId);
   },
 
   getRecent(limit = 20) {

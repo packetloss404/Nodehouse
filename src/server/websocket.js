@@ -70,6 +70,8 @@ function createWebSocketServer(httpServer, nodeManager, config, services = {}) {
 
     const session = new BBSSession(transport, nodeNum, nodeManager, {
       ...services,
+      transport: 'websocket',
+      remoteAddr: connectionKey,
       onAuthenticated: releasePending,
       recordLoginFailure() {
         return loginFailureLimiter.consume(connectionKey).allowed;
@@ -120,7 +122,7 @@ function createWebSocketServer(httpServer, nodeManager, config, services = {}) {
     idleTick = setInterval(() => {
       if (session.sessionEnded) { clearInterval(idleTick); return; }
       if (session.isIdleExpired()) {
-        session.disconnect();
+        session.disconnect('idle');
         ws.close();
         clearInterval(idleTick);
         return;
