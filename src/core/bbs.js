@@ -97,6 +97,9 @@ class BBSSession {
     this.gallery = new AnsiGallery();
     this.packetService = security.packetService || null;
     this.loginAttempts = 0;
+    // Idle accounting: the limit depends on whether the caller has identified.
+    this.lastActivity = Date.now();
+    this.idleWarned = false;
 
     // State-specific data
     this.stateData = {};
@@ -156,6 +159,8 @@ class BBSSession {
 
   handleData(data) {
     if (this.sessionEnded) return;
+    this.lastActivity = Date.now();
+    this.idleWarned = false;
     const buf = Buffer.isBuffer(data) ? data : Buffer.from(data);
     if (buf.length > MAX_INPUT_CHUNK_BYTES) {
       this.endConnection('Input limit exceeded.');
@@ -545,6 +550,7 @@ class BBSSession {
     this.user = db.users.getById(user.id);
     this.nodeManager.setUsername(this.nodeNum, user.username);
     this.nodeManager.setActivity(this.nodeNum, 'Reading logon summary');
+    if (typeof this.security.onAuthenticated === 'function') this.security.onAuthenticated();
 
     // Broadcast login notification
     this.nodeManager.broadcast(
@@ -2528,6 +2534,33 @@ class BBSSession {
         this.transport.end();
       } catch (e) {}
     }, 2000);
+  }
+
+  // ─── IDLE ACCOUNTING ────────────────────────────────────
+  // A caller who has not identified gets a short leash; an authenticated
+  // caller gets room to read. Both are overridable for tests.
+  idleLimitMs() {
+    const preAuthSeconds = Number(process.env.NODEHOUSE_IDLE_PREAUTH_MS)
+      || (Number(config.idleTimeoutPreAuth) || 60) * 1000;
+    const sessionSeconds = Number(process.env.NODEHOUSE_IDLE_SESSION_MS)
+      || (Number(config.idleTimeoutSession) || 900) * 1000;
+    return this.user ? sessionSeconds : preAuthSeconds;
+  }
+
+  isIdleExpired(now = Date.now()) {
+    return now - this.lastActivity >= this.idleLimitMs();
+  }
+
+  shouldWarnIdle(now = Date.now()) {
+    if (this.idleWarned) return false;
+    const elapsed = now - this.lastActivity;
+    const limit = this.idleLimitMs();
+    return elapsed >= limit - 30000 && elapsed < limit;
+  }
+
+  warnIdle() {
+    this.idleWarned = true;
+    this.write(`\r\n${ansi.brightYellow}    Idle: the line drops in 30 seconds unless you press a key.${ansi.reset}\r\n`);
   }
 
   // Called when connection drops unexpectedly

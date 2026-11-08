@@ -6,11 +6,16 @@ const {
   getSocketAddress,
   isAllowedWebSocketOrigin,
 } = require('./guardrails');
+const { getPendingLimiter } = require('./pending-limiter');
+
+// How often the idle governor checks a session. Tests shorten this.
+const IDLE_TICK_MS = Math.max(100, Number(process.env.NODEHOUSE_IDLE_TICK_MS) || 10000);
 
 function createWebSocketServer(httpServer, nodeManager, config, services = {}) {
   const connectionLimiter = new FixedWindowLimiter({ max: 30, windowMs: 60 * 1000 });
   const loginFailureLimiter = new FixedWindowLimiter({ max: 12, windowMs: 15 * 60 * 1000 });
   const registrationLimiter = new FixedWindowLimiter({ max: 3, windowMs: 60 * 60 * 1000 });
+  const pendingLimiter = getPendingLimiter();
   const wss = new WebSocketServer({
     server: httpServer,
     path: '/ws',
@@ -32,10 +37,23 @@ function createWebSocketServer(httpServer, nodeManager, config, services = {}) {
       return;
     }
 
+    if (!pendingLimiter.acquire(connectionKey)) {
+      ws.send('Too many pending connections from your address. Please try again shortly.\r\n');
+      ws.close();
+      return;
+    }
+    let pendingReleased = false;
+    const releasePending = () => {
+      if (pendingReleased) return;
+      pendingReleased = true;
+      pendingLimiter.release(connectionKey);
+    };
+
     const nodeNum = nodeManager.allocateNode(null);
     if (nodeNum === null) {
       ws.send('Sorry, all nodes are busy. Please try again later!\r\n');
       ws.close();
+      releasePending();
       return;
     }
 
@@ -52,6 +70,7 @@ function createWebSocketServer(httpServer, nodeManager, config, services = {}) {
 
     const session = new BBSSession(transport, nodeNum, nodeManager, {
       ...services,
+      onAuthenticated: releasePending,
       recordLoginFailure() {
         return loginFailureLimiter.consume(connectionKey).allowed;
       },
@@ -61,24 +80,31 @@ function createWebSocketServer(httpServer, nodeManager, config, services = {}) {
     });
     nodeManager.nodes.get(nodeNum).session = session;
 
+    let idleTick = null;
+    let interval = null;
+
     ws.on('message', (data) => {
-      const str = data.toString();
-      session.handleData(str);
+      session.handleData(data.toString());
     });
 
     ws.on('close', () => {
+      if (idleTick) clearInterval(idleTick);
+      if (interval) clearInterval(interval);
+      releasePending();
       session.disconnect();
     });
 
     ws.on('error', () => {
+      if (idleTick) clearInterval(idleTick);
+      if (interval) clearInterval(interval);
+      releasePending();
       session.disconnect();
     });
 
-    // Idle timeout via ping/pong
+    // Ping/pong keepalive for dead peers.
     let alive = true;
     ws.on('pong', () => { alive = true; });
-
-    const interval = setInterval(() => {
+    interval = setInterval(() => {
       if (!alive) {
         session.disconnect();
         ws.terminate();
@@ -87,9 +113,21 @@ function createWebSocketServer(httpServer, nodeManager, config, services = {}) {
       }
       alive = false;
       ws.ping();
-    }, config.idleTimeout * 1000);
+    }, Math.max(30000, (Number(config.idleTimeout) || 300) * 1000));
 
-    ws.on('close', () => clearInterval(interval));
+    // Idle governor: a short leash before the caller identifies, a longer one
+    // once they are logged in, with a warning before the line drops.
+    idleTick = setInterval(() => {
+      if (session.sessionEnded) { clearInterval(idleTick); return; }
+      if (session.isIdleExpired()) {
+        session.disconnect();
+        ws.close();
+        clearInterval(idleTick);
+        return;
+      }
+      if (session.shouldWarnIdle()) session.warnIdle();
+    }, IDLE_TICK_MS);
+    idleTick.unref?.();
   });
 
   return wss;

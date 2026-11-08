@@ -2,11 +2,16 @@
 const net = require('net');
 const BBSSession = require('../core/bbs');
 const { FixedWindowLimiter, getSocketAddress } = require('./guardrails');
+const { getPendingLimiter } = require('./pending-limiter');
+
+// How often the idle governor checks a session. Tests shorten this.
+const IDLE_TICK_MS = Math.max(100, Number(process.env.NODEHOUSE_IDLE_TICK_MS) || 10000);
 
 function createTelnetServer(nodeManager, config, services = {}) {
   const connectionLimiter = new FixedWindowLimiter({ max: 30, windowMs: 60 * 1000 });
   const loginFailureLimiter = new FixedWindowLimiter({ max: 12, windowMs: 15 * 60 * 1000 });
   const registrationLimiter = new FixedWindowLimiter({ max: 3, windowMs: 60 * 60 * 1000 });
+  const pendingLimiter = getPendingLimiter();
 
   const server = net.createServer((socket) => {
     const connectionKey = getSocketAddress(socket);
@@ -16,6 +21,17 @@ function createTelnetServer(nodeManager, config, services = {}) {
       return;
     }
 
+    if (!pendingLimiter.acquire(connectionKey)) {
+      socket.end('Too many pending connections from your address. Please try again shortly.\r\n');
+      return;
+    }
+    let pendingReleased = false;
+    const releasePending = () => {
+      if (pendingReleased) return;
+      pendingReleased = true;
+      pendingLimiter.release(connectionKey);
+    };
+
     socket.setEncoding(null); // Raw binary
     socket.setNoDelay(true);
 
@@ -23,6 +39,7 @@ function createTelnetServer(nodeManager, config, services = {}) {
     if (nodeNum === null) {
       socket.write('Sorry, all nodes are busy. Please try again later!\r\n');
       socket.end();
+      releasePending();
       return;
     }
 
@@ -40,6 +57,7 @@ function createTelnetServer(nodeManager, config, services = {}) {
 
     const session = new BBSSession(transport, nodeNum, nodeManager, {
       ...services,
+      onAuthenticated: releasePending,
       recordLoginFailure() {
         return loginFailureLimiter.consume(connectionKey).allowed;
       },
@@ -49,25 +67,37 @@ function createTelnetServer(nodeManager, config, services = {}) {
     });
     nodeManager.nodes.get(nodeNum).session = session;
 
+    let idleTick = null;
     socket.on('data', (data) => {
       session.handleData(data);
     });
 
     socket.on('close', () => {
+      if (idleTick) clearInterval(idleTick);
+      releasePending();
       session.disconnect();
     });
 
-    socket.on('error', (err) => {
+    socket.on('error', () => {
+      if (idleTick) clearInterval(idleTick);
+      releasePending();
       session.disconnect();
     });
 
-    // Idle timeout
-    socket.setTimeout(config.idleTimeout * 1000);
-    socket.on('timeout', () => {
-      socket.write('\r\n\r\nIdle timeout - disconnecting.\r\n');
-      session.disconnect();
-      socket.end();
-    });
+    // Idle governor: a short leash before the caller identifies, a longer one
+    // once they are logged in, with a warning before the line drops.
+    idleTick = setInterval(() => {
+      if (session.sessionEnded) { clearInterval(idleTick); return; }
+      if (session.isIdleExpired()) {
+        socket.write('\r\n\r\nIdle timeout - disconnecting.\r\n');
+        session.disconnect();
+        socket.end();
+        clearInterval(idleTick);
+        return;
+      }
+      if (session.shouldWarnIdle()) session.warnIdle();
+    }, IDLE_TICK_MS);
+    idleTick.unref?.();
   });
 
   return server;
