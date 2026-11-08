@@ -34,7 +34,9 @@ const { startBoard, login, register, delay, getFreePort } = require('../helpers/
 let board;
 
 test.before(async () => {
-  board = await startBoard();
+  // This suite deliberately simulates many callers from one address, so it
+  // raises the per-IP pending cap that protects a real board.
+  board = await startBoard({ env: { NODEHOUSE_PENDING_PER_IP: '64' } });
 });
 
 test.after(async () => {
@@ -253,7 +255,7 @@ test('WebSocket origin enforcement: disallowed origins are rejected, same-host a
 });
 
 test('Connection guardrail: the 30/min per-IP limiter refuses further connections', async () => {
-  const limitBoard = await startBoard();
+  const limitBoard = await startBoard({ env: { NODEHOUSE_PENDING_PER_IP: '64' } });
   const clients = [];
   try {
     for (let i = 0; i < 31; i += 1) {
