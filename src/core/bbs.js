@@ -29,6 +29,7 @@ const STATES = {
   MESSAGE_WRITE_TO: 'message_write_to',
   MESSAGE_WRITE_SUBJECT: 'message_write_subject',
   MESSAGE_WRITE_BODY: 'message_write_body',
+  MORE_PROMPT: 'more_prompt',
   FILE_AREAS: 'file_areas',
   FILE_LIST: 'file_list',
   DOOR_GAMES: 'door_games',
@@ -100,6 +101,9 @@ class BBSSession {
     // Idle accounting: the limit depends on whether the caller has identified.
     this.lastActivity = Date.now();
     this.idleWarned = false;
+    // Output paging: null when idle, { pages, index, onDone } while paging.
+    this.moreState = null;
+    this.moreNonstop = false;
 
     // State-specific data
     this.stateData = {};
@@ -137,6 +141,7 @@ class BBSSession {
     const prompts = {
       [STATES.CHAT_ACTIVE]: '> ', [STATES.PRIVATE_CHAT]: 'private> ',
       [STATES.MESSAGE_WRITE_BODY]: '│ ', [STATES.NODE_LOBBY]: 'Node command: ',
+      [STATES.MORE_PROMPT]: 'More: ',
       [STATES.MAIN_MENU]: 'Main> ', [STATES.MESSAGE_BASES]: 'Conference #: ',
       [STATES.MESSAGE_LIST]: 'Message command: ', [STATES.MESSAGE_READ]: 'F/R/T/U/N/P/Q: ',
       [STATES.MESSAGE_WRITE_TO]: 'To: ', [STATES.MESSAGE_WRITE_SUBJECT]: 'Subject: ',
@@ -287,6 +292,9 @@ class BBSSession {
         break;
       case STATES.MESSAGE_WRITE_BODY:
         this.handleMessageWriteBody(input);
+        break;
+      case STATES.MORE_PROMPT:
+        this.handleMore(input);
         break;
       case STATES.FILE_AREAS:
         this.handleFileAreas(input);
@@ -903,6 +911,71 @@ class BBSSession {
     this.prompt('Message command: ');
   }
 
+  // ─── OUTPUT PAGING ──────────────────────────────────────
+  moreSuppressed() {
+    const mode = String(this.user?.menu_mode || 'NOVICE').toUpperCase();
+    return this.moreNonstop || mode === 'EXPERT' || mode === 'SUPER';
+  }
+
+  // Pages a rendered screen at 22 lines. The frame is allowed to scroll: a BBS
+  // "more" prompt pages the output stream, not the screen.
+  pageOutput(text, onDone) {
+    const output = String(text);
+    if (this.moreSuppressed()) {
+      this.write(output);
+      if (onDone) onDone();
+      return;
+    }
+    const lines = output.split('\r\n');
+    if (lines.length <= 22) {
+      this.write(output);
+      if (onDone) onDone();
+      return;
+    }
+    const pages = [];
+    for (let index = 0; index < lines.length; index += 22) {
+      pages.push(lines.slice(index, index + 22).join('\r\n'));
+    }
+    this.moreState = { pages, index: 0, onDone };
+    this.writeNextPage();
+  }
+
+  writeNextPage() {
+    const state = this.moreState;
+    if (!state) return;
+    this.write(state.pages[state.index] + '\r\n');
+    state.index += 1;
+    if (state.index >= state.pages.length) {
+      this.moreState = null;
+      if (state.onDone) state.onDone();
+      else this.showMainMenu();
+      return;
+    }
+    this.state = STATES.MORE_PROMPT;
+    this.write(`\r\n${ansi.morePrompt}\r\n`);
+    this.prompt('More: ');
+  }
+
+  handleMore(input) {
+    const command = String(input || '').trim().toUpperCase();
+    const state = this.moreState;
+    if (!state) { this.showMainMenu(); return; }
+    if (command === 'S') {
+      this.moreState = null;
+      if (state.onDone) state.onDone(); else this.showMainMenu();
+      return;
+    }
+    if (command === 'N') {
+      this.moreNonstop = true;
+      const rest = state.pages.slice(state.index).join('\r\n');
+      this.moreState = null;
+      this.write(rest + '\r\n');
+      if (state.onDone) state.onDone(); else this.showMainMenu();
+      return;
+    }
+    this.writeNextPage();
+  }
+
   showMessage(msg) {
     this.state = STATES.MESSAGE_READ;
     this.stateData.currentMessage = msg;
@@ -920,8 +993,10 @@ class BBSSession {
       body: msg.body || '',
     };
 
-    this.write(ansi.art.messageRead(display));
-    this.prompt('F/R/T/U/N/P/Q: ');
+    this.pageOutput(ansi.art.messageRead(display), () => {
+      this.state = STATES.MESSAGE_READ;
+      this.prompt('F/R/T/U/N/P/Q: ');
+    });
   }
 
   rememberMessageReturn() {
@@ -1468,9 +1543,11 @@ class BBSSession {
     }
 
     screen += `${d}    └──────────────────────────────────────────────────────┘${r}\r\n`;
-    screen += ansi.pausePrompt;
 
-    this.write(screen);
+    this.pageOutput(screen, () => {
+      this.state = STATES.BULLETINS;
+      this.write(ansi.pausePrompt);
+    });
   }
 
   handleBulletins(input) {
