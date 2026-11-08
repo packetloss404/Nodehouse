@@ -88,6 +88,7 @@ class BBSSession {
     this.inputBuffer = '';
     this.inputEcho = true;
     this.callLogId = null;
+    this.endReason = null;
     this.sessionEnded = false;
     this.security = security;
     this.reader = createReaderService(db);
@@ -554,7 +555,10 @@ class BBSSession {
     this.stateData.previousLastCall = previousLastCall;
     this.user = user;
     db.users.updateLastCall(user.id);
-    this.callLogId = db.callLog.logLogin(user.id, user.username, this.nodeNum);
+    this.callLogId = db.callLog.logLogin(user.id, user.username, this.nodeNum, {
+      transport: this.security.transport || '',
+      remoteAddr: this.security.remoteAddr || '',
+    });
     this.user = db.users.getById(user.id);
     this.nodeManager.setUsername(this.nodeNum, user.username);
     this.nodeManager.setActivity(this.nodeNum, 'Reading logon summary');
@@ -2576,7 +2580,9 @@ class BBSSession {
     this.activeDoorRun = null;
 
     if (this.callLogId) {
-      db.callLog.logLogout(this.callLogId);
+      const reason = this.endReason
+        || (action === 'logged off from' ? 'user_logoff' : 'carrier_lost');
+      db.callLog.logLogout(this.callLogId, { endReason: reason });
       this.callLogId = null;
     }
 
@@ -2593,6 +2599,7 @@ class BBSSession {
 
   endConnection(message) {
     if (this.sessionEnded) return;
+    this.endReason = this.endReason || 'error';
     this.write(`\r\n${ansi.brightRed}    ${message}${ansi.reset}\r\n`);
     this.finalizeSession('disconnected from');
     try {
@@ -2641,7 +2648,8 @@ class BBSSession {
   }
 
   // Called when connection drops unexpectedly
-  disconnect() {
+  disconnect(reason = null) {
+    if (reason) this.endReason = reason;
     this.finalizeSession('disconnected from');
   }
 }

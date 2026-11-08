@@ -57,6 +57,8 @@ function createTelnetServer(nodeManager, config, services = {}) {
 
     const session = new BBSSession(transport, nodeNum, nodeManager, {
       ...services,
+      transport: 'telnet',
+      remoteAddr: connectionKey,
       onAuthenticated: releasePending,
       recordLoginFailure() {
         return loginFailureLimiter.consume(connectionKey).allowed;
@@ -90,7 +92,7 @@ function createTelnetServer(nodeManager, config, services = {}) {
       if (session.sessionEnded) { clearInterval(idleTick); return; }
       if (session.isIdleExpired()) {
         socket.write('\r\n\r\nIdle timeout - disconnecting.\r\n');
-        session.disconnect();
+        session.disconnect('idle');
         socket.end();
         clearInterval(idleTick);
         return;
