@@ -423,18 +423,18 @@ ansi.art.lastCallers = (calls = []) => {
     `${d}    ┌──────────────────────────────────────────────────────┐\r\n` +
     `${framedRow(d, `  ${c}NODEHOUSE // LAST CALLERS`)}\r\n` +
     `${d}    ├──────────────────────────────────────────────────────┤\r\n` +
-    `${framedRow(d, `  ${y}${'Caller'.padEnd(18)}${w}${'Logon'.padEnd(18)}${g}${'Node'.padEnd(6)}${c}Status`)}\r\n` +
+    `${framedRow(d, `  ${y}${'Caller'.padEnd(18)}${w}${'Calls'.padEnd(7)}${w}${'Logon'.padEnd(14)}${c}Status`)}\r\n` +
     `${d}    ├──────────────────────────────────────────────────────┤\r\n`;
 
   if (calls.length === 0) {
     screen += `${framedRow(d, `  ${w}No calls have been logged yet.`)}\r\n`;
   } else {
     for (const call of calls.slice(0, 15)) {
-      const username = String(call.username || 'Unknown').substring(0, 18).padEnd(18);
-      const login = String(call.login_time || '').substring(5, 16).padEnd(18);
-      const node = String(call.node_num || '-').padEnd(6);
-      const status = call.online ? 'ON ' : 'OFF';
-      screen += `${framedRow(d, `  ${y}${username}${w}${login}${g}${node}${c}${status}`)}\r\n`;
+      const username = String(call.username || 'Unknown').substring(0, 17).padEnd(18);
+      const count = String(call.total_calls ?? '-').padEnd(7);
+      const login = String(call.login_time || '').substring(5, 16).padEnd(14);
+      const status = call.online ? 'ONLINE' : (Number(call.total_calls) <= 1 ? 'NEW' : 'RETURNING');
+      screen += `${framedRow(d, `  ${y}${username}${w}${count}${g}${login}${c}${status}`)}\r\n`;
     }
   }
 
