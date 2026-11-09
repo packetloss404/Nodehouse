@@ -59,6 +59,7 @@ const STATES = {
   PAGE_SYSOP: 'page_sysop',
   DAILY_CALL: 'daily_call',
   READER_SETUP: 'reader_setup',
+  SCAN_DESK: 'scan_desk',
   MESSAGE_SEARCH: 'message_search',
   MESSAGE_RESULTS: 'message_results',
   THREAD_LIST: 'thread_list',
@@ -162,6 +163,7 @@ class BBSSession {
       [STATES.GRAFFITI_WRITE]: 'One-liner: ', [STATES.NOTE_WRITE]: 'Note: ',
       [STATES.PRIVATE_MAIL_MENU]: 'Command: ', [STATES.PRIVATE_MAIL_INBOX]: 'Mail #: ', [STATES.POLLS_LIST]: 'Poll #: ',
       [STATES.DAILY_CALL]: 'Daily command: ', [STATES.READER_SETUP]: 'Reader command: ',
+      [STATES.SCAN_DESK]: 'Scan: ',
       [STATES.MESSAGE_SEARCH]: 'Search messages: ', [STATES.MESSAGE_RESULTS]: 'Result message #, or Q: ',
       [STATES.THREAD_LIST]: 'Thread message #, or Q: ', [STATES.FRONT_PORCH]: 'Porch command: ',
       [STATES.PROFILE_EDIT]: 'Caller card: ', [STATES.PORCH_POST]: 'Porch post: ',
@@ -344,6 +346,9 @@ class BBSSession {
         break;
       case STATES.READER_SETUP:
         this.handleReaderSetup(input);
+        break;
+      case STATES.SCAN_DESK:
+        this.handleScanDesk(input);
         break;
       case STATES.MESSAGE_SEARCH:
         this.handleMessageSearch(input);
@@ -746,7 +751,7 @@ class BBSSession {
         this.showChatRooms();
         break;
       case 'N':
-        this.startNewMessageScan();
+        this.startScanDesk();
         break;
       case 'L':
         this.showLastCallers();
@@ -874,6 +879,48 @@ class BBSSession {
     this.stateData.currentBase = base;
     this.reader.setCurrentBase(this.user.id, base.id, this.getAccessibleMessageBases());
     this.showMessageList();
+  }
+
+  // ─── SCAN DESK ──────────────────────────────────────────
+  startScanDesk() {
+    this.state = STATES.SCAN_DESK;
+    this.write(`\r\n${ansi.brightCyan}    NODEHOUSE // SCAN DESK${ansi.reset}\r\n`);
+    this.write(`${ansi.cyan}    Enter = unread   Y = to me   A = all   F <user>   S <date>   NS = no pause${ansi.reset}\r\n`);
+    this.prompt('Scan: ');
+  }
+
+  handleScanDesk(input) {
+    const raw = String(input || '').trim();
+    const upper = raw.toUpperCase();
+    const bases = this.getAccessibleMessageBases();
+    const options = { userId: this.user.id, unreadOnly: true };
+
+    if (upper === '' || upper === 'U' || upper === 'L') { this.startNewMessageScan(); return; }
+    if (upper === 'NS') { this.moreNonstop = true; this.startNewMessageScan(); return; }
+    if (upper === 'A') options.unreadOnly = false;
+    else if (upper === 'Y') options.toUser = this.user.username;
+    else if (upper.startsWith('F ')) options.fromUser = raw.slice(2).trim();
+    else if (upper.startsWith('S ')) {
+      const value = raw.slice(2).trim();
+      options.since = /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : `${new Date().getFullYear()}-${value}`;
+    } else { this.startScanDesk(); return; }
+
+    const order = new Map(bases.map((base, index) => [base.id, index]));
+    const messages = db.messages.scan(bases.map((base) => base.id), options)
+      .sort((a, b) => (order.get(a.base_id) ?? 99) - (order.get(b.base_id) ?? 99) || a.id - b.id);
+
+    if (!messages.length) {
+      this.write(`${ansi.brightYellow}    Nothing to scan.${ansi.reset}\r\n`);
+      this.showMainMenu();
+      return;
+    }
+
+    this.stateData.messages = messages;
+    this.stateData.messageIndex = 0;
+    this.stateData.scanMode = 'GLOBAL';
+    const base = bases.find((item) => item.id === messages[0].base_id);
+    if (base) this.stateData.currentBase = base;
+    this.showMessage(messages[0]);
   }
 
   startNewMessageScan() {

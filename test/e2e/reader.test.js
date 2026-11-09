@@ -500,7 +500,8 @@ test('reader: personal newscan [R] skips unsubscribed conferences', async () => 
     await closeReaderSetup(client);
 
     const before = client.mark();
-    await client.sendAndWait('N', 'E2E-Sub-Base3');
+    await client.sendAndWait('N', /SCAN DESK/);
+    await client.sendAndWait('', 'E2E-Sub-Base3');
     const scan = client.since(before);
     assert.match(scan, /New-message scan: 1 message/);
     assert.match(scan, /E2E-Sub-Base3/);
@@ -535,7 +536,8 @@ test('reader: personal newscan [R] honours the caller-defined scan order', async
     await closeReaderSetup(client);
 
     let before = client.mark();
-    await client.sendAndWait('N', 'E2E-Order-Base3');
+    await client.sendAndWait('N', /SCAN DESK/);
+    await client.sendAndWait('', 'E2E-Order-Base3');
     assert.match(client.since(before), /Subj: E2E-Order-Base3/);
 
     before = client.mark();
