@@ -1767,8 +1767,35 @@ const doors = {
     return changes ? db.prepare('SELECT * FROM door_runs WHERE id = ?').get(runId) : null;
   },
 
-  getLeaderboard(doorId, limit = 10, period = 'all') {
-    const since = period === 'day' ? "datetime('now', '-1 day')"
+  getBest(userId, doorId) {
+    const row = db.prepare(`
+      SELECT MAX(score) AS best FROM door_runs
+      WHERE user_id = ? AND door_key = ? AND completed_at IS NOT NULL
+    `).get(userId, String(doorId));
+    return row && row.best !== null ? row.best : null;
+  },
+
+  getRank(userId, doorId) {
+    const best = this.getBest(userId, doorId);
+    if (best === null) return null;
+    const row = db.prepare(`
+      SELECT COUNT(*) AS better FROM (
+        SELECT user_id, MAX(score) AS best FROM door_runs
+        WHERE door_key = ? AND completed_at IS NOT NULL GROUP BY user_id
+      ) WHERE best > ?
+    `).get(String(doorId), best);
+    return row.better + 1;
+  },
+
+  getUsage(userId, doorId) {
+    const date = doorDayKey(new Date(), Number(config.doorResetHour) || 0);
+    const row = db.prepare(`
+      SELECT turns_used FROM door_usage WHERE user_id = ? AND door_key = ? AND usage_date = ?
+    `).get(userId, String(doorId), date);
+    return row ? row.turns_used : 0;
+  },
+
+  getLeaderboard(doorId, limit = 10, period = 'all') {    const since = period === 'day' ? "datetime('now', '-1 day')"
       : period === 'week' ? "datetime('now', '-7 days')"
         : period === 'month' ? "datetime('now', '-1 month')" : null;
     return db.prepare(`
