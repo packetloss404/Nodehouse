@@ -1121,6 +1121,17 @@ class BBSSession {
     this.writeNextPage();
   }
 
+  // ─── TIME BANK ──────────────────────────────────────────
+  timeBankEnabled() {
+    return config.timeBank === true || process.env.NODEHOUSE_TIME_BANK === '1';
+  }
+
+  earnTimeBank(minutes) {
+    if (!this.timeBankEnabled() || !this.user) return;
+    db.users.addTimeBank(this.user.id, minutes);
+    this.user = db.users.getById(this.user.id);
+  }
+
   // ─── FIRST CALL QUEST ───────────────────────────────────
   questStep(step) {
     if (!this.user || this.user.guest || this.user.quest_done_at) return;
@@ -1474,6 +1485,7 @@ class BBSSession {
       });
       db.messages.markRead(messageId, this.user.id);
       db.users.incrementPosts(this.user.id);
+      this.earnTimeBank(2);
       if (this.stateData.resumedDraftId) {
         this.reader.deleteDraft(this.user.id, this.stateData.resumedDraftId);
         this.stateData.resumedDraftId = null;
@@ -1736,6 +1748,30 @@ class BBSSession {
     const cmd = (input || '').toUpperCase();
     if (cmd === 'Q' || !cmd) {
       this.showMainMenu();
+      return;
+    }
+
+    if (cmd === 'B') {
+      if (!this.timeBankEnabled()) {
+        this.write(`${ansi.brightYellow}    The time bank is not enabled on this board.${ansi.reset}\r\n`);
+        this.showDoorGames();
+        return;
+      }
+      const banked = Number(db.users.getById(this.user.id).time_bank_minutes) || 0;
+      if (banked < 30) {
+        this.write(`${ansi.brightYellow}    ${banked} minute(s) banked; 30 buys an extra turn.${ansi.reset}\r\n`);
+        this.showDoorGames();
+        return;
+      }
+      if (!db.users.spendTimeBank(this.user.id, 30)) {
+        this.write(`${ansi.brightYellow}    Not enough banked time.${ansi.reset}\r\n`);
+        this.showDoorGames();
+        return;
+      }
+      db.users.addBonusTurn(this.user.id, 1);
+      this.user = db.users.getById(this.user.id);
+      this.write(`${ansi.brightGreen}    Spent 30 banked minutes for one extra door turn.${ansi.reset}\r\n`);
+      this.showDoorGames();
       return;
     }
 
@@ -2473,6 +2509,7 @@ class BBSSession {
 
     const msg = input.substring(0, 38);
     db.graffiti.add(this.user.username, msg);
+    this.earnTimeBank(1);
     this.questStep('liner');
     this.write(`${ansi.brightGreen}    One-liner posted!${ansi.reset}\r\n`);
     this.showGraffitiWall();

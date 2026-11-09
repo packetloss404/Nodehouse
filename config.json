@@ -12,6 +12,7 @@
   "allowGuests": true,
   "requireValidation": false,
   "validationGraceDays": 7,
+  "timeBank": false,
   "defaultTheme": "packet",
   "idleTimeout": 300,
   "idleTimeoutPreAuth": 60,
