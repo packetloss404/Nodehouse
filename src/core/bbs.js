@@ -260,8 +260,12 @@ class BBSSession {
 
   processInputUnchecked(input) {
     if (this.sessionEnded) return;
-    if (this.user && this.user.guest && GUEST_READ_ONLY_STATES.has(this.state)) {
-      this.write(`\r\n${ansi.brightYellow}    Guest accounts can read the board but cannot post. Type NEW at logon to register.${ansi.reset}\r\n`);
+    const readOnly = this.user && (this.user.guest || this.user.state === 'pending');
+    if (readOnly && GUEST_READ_ONLY_STATES.has(this.state)) {
+      const message = this.user.state === 'pending'
+        ? 'Your account is awaiting validation. You can read, but not post yet.'
+        : 'Guest accounts can read the board but cannot post. Type NEW at logon to register.';
+      this.write(`\r\n${ansi.brightYellow}    ${message}${ansi.reset}\r\n`);
       this.showMainMenu();
       return;
     }
@@ -561,6 +565,9 @@ class BBSSession {
   handleNewUserRealname(input) {
     try {
       const user = db.users.create(this.stateData.newUsername, this.stateData.newPassword, input || '');
+      if (config.requireValidation === true || process.env.NODEHOUSE_REQUIRE_VALIDATION === '1') {
+        db.users.setState(user.id, 'pending');
+      }
       this.write(`\r\n${ansi.brightGreen}    Account created successfully! Welcome, ${user.username}!${ansi.reset}\r\n`);
       this.loginUser(user);
     } catch (e) {
@@ -571,6 +578,15 @@ class BBSSession {
   }
 
   loginUser(user) {
+    // A pending account is promoted automatically once the grace window passes.
+    if (user.state === 'pending') {
+      const grace = Number(config.validationGraceDays) || 0;
+      const created = Date.parse(String(user.created_at || '').replace(' ', 'T') + 'Z');
+      if (grace > 0 && Number.isFinite(created) && Date.now() - created >= grace * 86400000) {
+        db.users.setState(user.id, 'active');
+        user = db.users.getById(user.id);
+      }
+    }
     const previousLastCall = user.last_call_date;
     this.stateData.previousLastCall = previousLastCall;
     this.user = user;
@@ -644,6 +660,9 @@ class BBSSession {
     this.nodeManager.setActivity(this.nodeNum, 'Main Menu');
     if (this.user && this.user.guest) {
       this.write(`${ansi.cyan}    Guest line — read only. Type NEW at logon to register.${ansi.reset}\r\n`);
+    }
+    if (this.user && this.user.state === 'pending') {
+      this.write(`${ansi.brightYellow}    Account pending validation — read only for now.${ansi.reset}\r\n`);
     }
     if (this.user && !this.user.guest) {
       if (this.user.quest_done_at) {

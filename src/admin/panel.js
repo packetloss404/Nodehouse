@@ -95,6 +95,26 @@ function setupAdminPanel(app, nodeManager, config) {
     res.json(db.users.getAll());
   });
 
+  app.get('/admin/api/users/pending', requireAuth, requirePermission('MANAGE_USERS'), (req, res) => {
+    res.json(db.users.listPending());
+  });
+
+  app.post('/admin/api/users/:id/validate', requireAuth, requirePermission('MANAGE_USERS'), (req, res) => {
+    const id = parseInt(req.params.id);
+    if (!db.users.getById(id)) return res.status(404).json({ error: 'User not found' });
+    db.users.setState(id, 'active');
+    community.recordAudit(req.adminActor, 'user.validate', 'user', req.params.id);
+    res.json({ ok: true });
+  });
+
+  app.post('/admin/api/users/:id/reject', requireAuth, requirePermission('MANAGE_USERS'), (req, res) => {
+    const id = parseInt(req.params.id);
+    if (!db.users.getById(id)) return res.status(404).json({ error: 'User not found' });
+    db.users.setState(id, 'rejected');
+    community.recordAudit(req.adminActor, 'user.reject', 'user', req.params.id);
+    res.json({ ok: true });
+  });
+
   app.get('/admin/api/users/:id', requireAuth, requirePermission('MANAGE_USERS'), (req, res) => {
     const user = db.users.getById(parseInt(req.params.id));
     if (!user) return res.status(404).json({ error: 'User not found' });
