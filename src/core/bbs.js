@@ -620,6 +620,17 @@ class BBSSession {
       callsToday: db.callLog.countToday(),
     };
     this.showLogonSummary();
+    this.announceBirthday();
+  }
+
+  announceBirthday() {
+    const profile = this.community.profileForUser(this.user.id);
+    if (!profile || !profile.birthday_visible || !profile.birthday) return;
+    const now = new Date();
+    const today = `${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    if (profile.birthday === today) {
+      this.write(`${ansi.brightYellow}    ★ Happy birthday, ${this.user.username}!${ansi.reset}\r\n`);
+    }
   }
 
   getAccessibleMessageBases() {
@@ -1695,6 +1706,13 @@ class BBSSession {
     this.write(`${ansi.brightYellow}    New bulletins / files:${ansi.brightWhite} ${report.bulletins.newSinceLastCall} / ${report.files.newSinceLastCall}\r\n`);
     this.write(`${ansi.brightYellow}    Callers since last call:${ansi.brightWhite} ${report.callers.sinceLastCall}\r\n`);
     this.write(`${ansi.brightYellow}    Active voting booths:${ansi.brightWhite} ${report.polls.active}${ansi.reset}\r\n\r\n`);
+    const calendar = this.community.houseCalendar();
+    if (calendar.birthdays.length || calendar.anniversaries.length) {
+      const bits = [];
+      if (calendar.birthdays.length) bits.push(`birthdays: ${calendar.birthdays.join(', ')}`);
+      if (calendar.anniversaries.length) bits.push(`call anniversaries: ${calendar.anniversaries.join(', ')}`);
+      this.write(`${ansi.brightYellow}    This week at the House:${ansi.brightWhite} ${bits.join(' · ')}${ansi.reset}\r\n\r\n`);
+    }
     this.write(`${ansi.cyan}    [N] Newscan  [E] Mail  [B] Bulletins  [F] Files  [H] Porch  [Q] Main${ansi.reset}\r\n`);
     this.prompt('Daily command: ');
   }
@@ -1768,8 +1786,15 @@ class BBSSession {
   }
 
   handleProfileEdit(input) {
-    const [display_name = '', interests = '', ...bioParts] = String(input || '').split('|').map((item) => item.trim());
-    this.community.saveProfile(this.user.id, { display_name, interests, bio: bioParts.join(' | ') });
+    const parts = String(input || '').split('|').map((item) => item.trim());
+    let birthday;
+    if (parts.length > 3 && /^(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/.test(parts[parts.length - 1])) {
+      birthday = parts.pop();
+    }
+    const [display_name = '', interests = '', ...bioParts] = parts;
+    this.community.saveProfile(this.user.id, {
+      display_name, interests, bio: bioParts.join(' | '), ...(birthday !== undefined ? { birthday } : {}),
+    });
     this.write(`${ansi.brightGreen}    Caller card saved. Visibility remains your choice.${ansi.reset}\r\n`);
     this.showFrontPorch();
   }

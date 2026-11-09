@@ -592,6 +592,7 @@ function init() {
   // These caller-card fields arrived after the initial profile migration.
   ensureColumn('user_profiles', 'favorite_boards', "TEXT NOT NULL DEFAULT ''");
   ensureColumn('user_profiles', 'favorite_doors', "TEXT NOT NULL DEFAULT ''");
+  ensureColumn('user_profiles', 'birthday_visible', 'INTEGER NOT NULL DEFAULT 0');
 
   migrateLegacySeedContent();
 
@@ -1190,19 +1191,20 @@ const communityProfiles = {
     db.prepare(`
       INSERT INTO user_profiles
         (user_id, display_name, bio, interests, favorite_boards, favorite_doors,
-         ansi_avatar, profile_visible, spotlight_opt_in, birthday)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ansi_avatar, profile_visible, spotlight_opt_in, birthday, birthday_visible)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(user_id) DO UPDATE SET
         display_name = excluded.display_name, bio = excluded.bio, interests = excluded.interests,
         favorite_boards = excluded.favorite_boards, favorite_doors = excluded.favorite_doors,
         ansi_avatar = excluded.ansi_avatar, profile_visible = excluded.profile_visible,
         spotlight_opt_in = excluded.spotlight_opt_in, birthday = excluded.birthday,
+        birthday_visible = excluded.birthday_visible,
         updated_at = datetime('now')
     `).run(
       userId, value('display_name'), value('bio'), value('interests'),
       value('favorite_boards'), value('favorite_doors'), value('ansi_avatar'),
       value('profile_visible', 0) ? 1 : 0, value('spotlight_opt_in', 0) ? 1 : 0,
-      value('birthday', null)
+      value('birthday', null), value('birthday_visible', 0) ? 1 : 0
     );
     return this.getByUserId(userId);
   },
@@ -1230,6 +1232,15 @@ const communityProfiles = {
       ORDER BY p.profile_visible DESC, COALESCE(u.last_call_date, u.first_call_date) DESC, u.username
       LIMIT ? OFFSET ?
     `).all(pattern, pattern, pattern, pattern, boundedLimit(limit), Math.max(0, Number(offset) || 0));
+  },
+
+  // Birthdays and call dates for the house calendar.
+  listCalendar() {
+    return db.prepare(`
+      SELECT u.username, u.first_call_date, p.birthday, p.birthday_visible
+      FROM users u LEFT JOIN user_profiles p ON p.user_id = u.id
+      WHERE u.username <> 'GUEST'
+    `).all();
   },
 };
 
