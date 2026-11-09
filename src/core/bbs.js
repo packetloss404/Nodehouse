@@ -44,6 +44,7 @@ const STATES = {
   CHAT_ACTIVE: 'chat_active',
   GRAFFITI_WALL: 'graffiti_wall',
   GRAFFITI_WRITE: 'graffiti_write',
+  NOTE_WRITE: 'note_write',
   PRIVATE_MAIL_MENU: 'private_mail_menu',
   PRIVATE_MAIL_INBOX: 'private_mail_inbox',
   PRIVATE_MAIL_READ: 'private_mail_read',
@@ -158,8 +159,8 @@ class BBSSession {
       [STATES.FILE_AREAS]: 'Area #: ', [STATES.FILE_LIST]: 'Command: ',
       [STATES.DOOR_GAMES]: 'Door #: ', [STATES.USER_SETTINGS]: 'Setting #: ',
       [STATES.CHAT_ROOMS]: 'Room #: ', [STATES.GRAFFITI_WALL]: 'Command: ',
-      [STATES.GRAFFITI_WRITE]: 'One-liner: ', [STATES.PRIVATE_MAIL_MENU]: 'Command: ',
-      [STATES.PRIVATE_MAIL_INBOX]: 'Mail #: ', [STATES.POLLS_LIST]: 'Poll #: ',
+      [STATES.GRAFFITI_WRITE]: 'One-liner: ', [STATES.NOTE_WRITE]: 'Note: ',
+      [STATES.PRIVATE_MAIL_MENU]: 'Command: ', [STATES.PRIVATE_MAIL_INBOX]: 'Mail #: ', [STATES.POLLS_LIST]: 'Poll #: ',
       [STATES.DAILY_CALL]: 'Daily command: ', [STATES.READER_SETUP]: 'Reader command: ',
       [STATES.MESSAGE_SEARCH]: 'Search messages: ', [STATES.MESSAGE_RESULTS]: 'Result message #, or Q: ',
       [STATES.THREAD_LIST]: 'Thread message #, or Q: ', [STATES.FRONT_PORCH]: 'Porch command: ',
@@ -420,6 +421,9 @@ class BBSSession {
       case STATES.GRAFFITI_WRITE:
         this.handleGraffitiWrite(input);
         break;
+      case STATES.NOTE_WRITE:
+        this.handleNoteWrite(input);
+        break;
       case STATES.PRIVATE_MAIL_MENU:
         this.handlePrivateMailMenu(input);
         break;
@@ -621,6 +625,16 @@ class BBSSession {
     };
     this.showLogonSummary();
     this.announceBirthday();
+    this.showNextCallerNote();
+  }
+
+  showNextCallerNote() {
+    const note = db.callerNotes.take();
+    if (!note) return;
+    this.write(`\r\n${ansi.brightCyan}    A note from ${note.username}:${ansi.reset}\r\n`);
+    for (const line of ansi.wrapText(note.body, 68).slice(0, 3)) {
+      this.write(`${ansi.brightWhite}      ${line}${ansi.reset}\r\n`);
+    }
   }
 
   announceBirthday() {
@@ -2221,6 +2235,7 @@ class BBSSession {
 
     screen += `${d}    ├──────────────────────────────────────────────────────┤\r\n`;
     screen += `${ansi.frameRow(d, `  ${y}[${w}W${y}]${c} Write one-liner    ${y}[${w}Q${y}]${c} Return to Main Menu`)}\r\n`;
+    screen += `${ansi.frameRow(d, `  ${y}[${w}N${y}]${c} Note to the next caller`)}\r\n`;
     screen += `${d}    └──────────────────────────────────────────────────────┘${r}\r\n`;
 
     this.write(screen);
@@ -2238,7 +2253,22 @@ class BBSSession {
       this.prompt('One-liner (max 38 chars): ');
       return;
     }
+    if (cmd === 'N') {
+      this.state = STATES.NOTE_WRITE;
+      this.prompt('Note to the next caller: ');
+      return;
+    }
     this.prompt('Command: ');
+  }
+
+  handleNoteWrite(input) {
+    if (!input) {
+      this.showGraffitiWall();
+      return;
+    }
+    db.callerNotes.create(this.user.id, this.user.username, String(input).slice(0, 200));
+    this.write(`${ansi.brightGreen}    Note left for the next caller.${ansi.reset}\r\n`);
+    this.showGraffitiWall();
   }
 
   handleGraffitiWrite(input) {
