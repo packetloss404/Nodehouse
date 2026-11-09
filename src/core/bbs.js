@@ -1701,7 +1701,35 @@ class BBSSession {
       `${d}    └──────────────────────────────────────────────────────┘${r}\r\n`;
 
     this.write(screen);
+    const reset = this.doorResetCountdown();
+    this.write(`${ansi.cyan}    Daily reset in ${ansi.brightWhite}${reset}${ansi.reset}\r\n`);
+    const playing = new Map();
+    for (const node of this.nodeManager.getOnlineUsers()) {
+      const match = /^Playing (.+)$/.exec(node.activity || '');
+      if (match) playing.set(match[1], (playing.get(match[1]) || 0) + 1);
+    }
+    for (const door of this.doorService.list()) {
+      const used = db.doors.getUsage(this.user.id, door.id);
+      const left = Math.max(0, door.dailyRuns - used);
+      const best = db.doors.getBest(this.user.id, door.id);
+      const rank = db.doors.getRank(this.user.id, door.id);
+      const leaders = this.doorService.leaderboard(door.id, 1, 'all');
+      const leader = leaders[0] ? `${leaders[0].username} ${leaders[0].score}` : '—';
+      const here = playing.get(door.name) || 0;
+      this.write(`${ansi.brightYellow}    ${door.number}. ${ansi.brightWhite}${door.name.padEnd(26)}${ansi.cyan}turns ${left}/${door.dailyRuns}${ansi.reset}\r\n`);
+      this.write(`${ansi.cyan}       best ${best === null ? '—' : best}${rank ? ` (#${rank})` : ''} · leader ${leader}${here ? ` · ${here} playing` : ''}${ansi.reset}\r\n`);
+    }
     this.prompt('Door #: ');
+  }
+
+  doorResetCountdown() {
+    const resetHour = Number(config.doorResetHour) || 0;
+    const now = new Date();
+    const next = new Date(now.getTime());
+    next.setHours(resetHour, 0, 0, 0);
+    if (next <= now) next.setDate(next.getDate() + 1);
+    const minutes = Math.round((next - now) / 60000);
+    return `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
   }
 
   handleDoorGames(input) {
