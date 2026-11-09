@@ -1386,7 +1386,7 @@ class BBSSession {
     }
     this.state = STATES.MESSAGE_WRITE_BODY;
     this.stateData.messageLines = nm.prefill ? nm.prefill.split(/\r?\n/) : [];
-    this.write(`\r\n${ansi.brightGreen}    Enter your message (${ansi.brightWhite}/S${ansi.brightGreen} save, ${ansi.brightWhite}/D${ansi.brightGreen} draft, ${ansi.brightWhite}/A${ansi.brightGreen} abort):${ansi.reset}\r\n`);
+    this.write(`\r\n${ansi.brightGreen}    Enter your message (${ansi.brightWhite}/S${ansi.brightGreen} save, ${ansi.brightWhite}/D${ansi.brightGreen} draft, ${ansi.brightWhite}/A${ansi.brightGreen} abort, ${ansi.brightWhite}/?${ansi.brightGreen} help):${ansi.reset}\r\n`);
     this.write(`${ansi.cyan}    ──────────────────────────────────────────${ansi.reset}\r\n`);
     if (nm.prefill) this.write(`${ansi.cyan}${nm.prefill}${ansi.reset}\r\n`);
     this.prompt('│ ');
@@ -1437,6 +1437,60 @@ class BBSSession {
       }, this.getAccessibleMessageBases());
       this.write(`${ansi.brightGreen}    Draft #${saved.id} saved.${ansi.reset}\r\n`);
       this.finishCompose(() => this.showMessageList());
+      return;
+    }
+
+    const command = input.toUpperCase();
+    if (command === '/L') {
+      const lines = this.stateData.messageLines;
+      if (!lines.length) this.write(`${ansi.brightYellow}    (empty)${ansi.reset}\r\n`);
+      lines.forEach((line, index) => {
+        this.write(`${ansi.cyan}${String(index + 1).padStart(3)}${ansi.brightWhite} ${line}${ansi.reset}\r\n`);
+      });
+      this.prompt('│ ');
+      return;
+    }
+    if (command === '/?') {
+      this.write(`${ansi.cyan}    /L list  /E n text replace  /I n text insert  /D n delete  /T stats  /S save  /D draft  /A abort${ansi.reset}\r\n`);
+      this.prompt('│ ');
+      return;
+    }
+    if (command === '/T') {
+      const text = this.stateData.messageLines.join('\r\n');
+      this.write(`${ansi.cyan}    ${this.stateData.messageLines.length} lines, ${Buffer.byteLength(text, 'utf8')} bytes.${ansi.reset}\r\n`);
+      this.prompt('│ ');
+      return;
+    }
+    const replace = input.match(/^\/E\s+(\d+)\s+([\s\S]*)$/i);
+    if (replace) {
+      const index = Number(replace[1]) - 1;
+      if (index < 0 || index >= this.stateData.messageLines.length) {
+        this.write(`${ansi.brightRed}    No line ${replace[1]}.${ansi.reset}\r\n`);
+      } else {
+        this.stateData.messageLines[index] = replace[2];
+        this.write(`${ansi.brightGreen}    Line ${replace[1]} replaced.${ansi.reset}\r\n`);
+      }
+      this.prompt('│ ');
+      return;
+    }
+    const insert = input.match(/^\/I\s+(\d+)\s+([\s\S]*)$/i);
+    if (insert) {
+      const index = Math.max(0, Math.min(Number(insert[1]) - 1, this.stateData.messageLines.length));
+      this.stateData.messageLines.splice(index, 0, insert[2]);
+      this.write(`${ansi.brightGreen}    Inserted at line ${index + 1}.${ansi.reset}\r\n`);
+      this.prompt('│ ');
+      return;
+    }
+    const remove = input.match(/^\/D\s+(\d+)$/i);
+    if (remove) {
+      const index = Number(remove[1]) - 1;
+      if (index < 0 || index >= this.stateData.messageLines.length) {
+        this.write(`${ansi.brightRed}    No line ${remove[1]}.${ansi.reset}\r\n`);
+      } else {
+        this.stateData.messageLines.splice(index, 1);
+        this.write(`${ansi.brightGreen}    Line ${remove[1]} deleted.${ansi.reset}\r\n`);
+      }
+      this.prompt('│ ');
       return;
     }
 
