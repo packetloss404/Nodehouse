@@ -40,6 +40,18 @@ test('usage is recorded against the board day', () => {
   assert.equal(row.usage_date, doorDayKey(new Date(), Number(config.doorResetHour) || 0));
 });
 
+test('a banked bonus turn is spent after the daily allowance', () => {
+  if (!db || !db.open) db = database.init();
+  const user = database.users.create('BonusCaller', 'long-enough-password');
+  database.users.completeQuest(user.id);
+
+  for (let run = 0; run < 5; run += 1) {
+    assert.equal(database.doors.beginRun(user.id, 'token_tycoon', 5).allowed, true);
+  }
+  assert.equal(database.doors.beginRun(user.id, 'token_tycoon', 5).allowed, true, 'the bonus turn should be spent');
+  assert.equal(database.doors.beginRun(user.id, 'token_tycoon', 5).allowed, false, 'the allowance is then exhausted');
+});
+
 test('an expired season is closed and a new one opened', () => {
   if (!db || !db.open) db = database.init();
   const user = database.users.create('SeasonCaller', 'long-enough-password');

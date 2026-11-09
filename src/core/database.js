@@ -367,6 +367,11 @@ function init() {
   // Additive compatibility for databases created before caller menu modes.
   ensureColumn('users', 'menu_mode', "TEXT NOT NULL DEFAULT 'NOVICE'");
   ensureColumn('users', 'guest', 'INTEGER NOT NULL DEFAULT 0');
+  ensureColumn('users', 'quest_read', 'INTEGER NOT NULL DEFAULT 0');
+  ensureColumn('users', 'quest_liner', 'INTEGER NOT NULL DEFAULT 0');
+  ensureColumn('users', 'quest_chat', 'INTEGER NOT NULL DEFAULT 0');
+  ensureColumn('users', 'quest_done_at', 'TEXT');
+  ensureColumn('users', 'bonus_door_turns', 'INTEGER NOT NULL DEFAULT 0');
 
   // Reader continuity and extension tables are deliberately additive. Existing
   // local message IDs and message_read rows remain the canonical read state.
@@ -810,6 +815,20 @@ const users = {
 
   incrementPosts(userId) {
     db.prepare('UPDATE users SET total_posts = total_posts + 1 WHERE id = ?').run(userId);
+  },
+
+  markQuest(userId, step) {
+    const column = { read: 'quest_read', liner: 'quest_liner', chat: 'quest_chat' }[step];
+    if (!column) return;
+    db.prepare(`UPDATE users SET ${column} = 1 WHERE id = ?`).run(userId);
+  },
+
+  completeQuest(userId) {
+    return db.prepare(`
+      UPDATE users
+      SET quest_done_at = datetime('now'), bonus_door_turns = bonus_door_turns + 1
+      WHERE id = ? AND quest_done_at IS NULL
+    `).run(userId).changes > 0;
   },
 
   getAll() {
@@ -1626,16 +1645,25 @@ const doors = {
       const usage = db.prepare(`
         SELECT turns_used FROM door_usage WHERE user_id = ? AND door_key = ? AND usage_date = ?
       `).get(userId, key, date);
-      if (usage.turns_used >= limit) return { allowed: false, remaining: 0, runId: null };
-      db.prepare(`
-        UPDATE door_usage SET turns_used = turns_used + 1, updated_at = datetime('now')
-        WHERE user_id = ? AND door_key = ? AND usage_date = ?
-      `).run(userId, key, date);
+      let remaining;
+      if (usage.turns_used >= limit) {
+        // A quest or event reward can bank an extra turn past the daily limit.
+        const reward = db.prepare('SELECT bonus_door_turns FROM users WHERE id = ?').get(userId);
+        if (!reward || reward.bonus_door_turns <= 0) return { allowed: false, remaining: 0, runId: null };
+        db.prepare('UPDATE users SET bonus_door_turns = bonus_door_turns - 1 WHERE id = ?').run(userId);
+        remaining = 0;
+      } else {
+        db.prepare(`
+          UPDATE door_usage SET turns_used = turns_used + 1, updated_at = datetime('now')
+          WHERE user_id = ? AND door_key = ? AND usage_date = ?
+        `).run(userId, key, date);
+        remaining = limit - usage.turns_used - 1;
+      }
       const season = ensureActiveSeason(key);
       const runId = db.prepare(`
         INSERT INTO door_runs (user_id, door_key, season_id) VALUES (?, ?, ?)
       `).run(userId, key, season ? season.id : null).lastInsertRowid;
-      return { allowed: true, remaining: limit - usage.turns_used - 1, runId };
+      return { allowed: true, remaining, runId };
     })();
   },
 
