@@ -1357,6 +1357,17 @@ const callLog = {
     return db.prepare('SELECT * FROM call_log ORDER BY login_time DESC, id DESC LIMIT ?').all(limit);
   },
 
+  // One row per caller, with their lifetime call count, for Last Callers.
+  getRecentUnique(limit = 15) {
+    return db.prepare(`
+      SELECT c.*, u.total_calls
+      FROM call_log c
+      JOIN users u ON u.id = c.user_id
+      WHERE c.id IN (SELECT MAX(id) FROM call_log WHERE user_id IS NOT NULL GROUP BY user_id)
+      ORDER BY c.login_time DESC, c.id DESC LIMIT ?
+    `).all(boundedLimit(limit, 15, 50));
+  },
+
   getPrevious(currentLogId) {
     return db.prepare(`
       SELECT * FROM call_log

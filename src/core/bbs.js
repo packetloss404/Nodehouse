@@ -1629,7 +1629,7 @@ class BBSSession {
         .map((node) => node.session && node.session.callLogId)
         .filter(Boolean)
     );
-    const calls = db.callLog.getRecent(15)
+    const calls = db.callLog.getRecentUnique(15)
       .map((call) => ({
         ...call,
         login_time: formatLocalDateTime(call.login_time),
