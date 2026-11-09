@@ -9,6 +9,8 @@ const PROFILE_FIELDS = Object.freeze({
   favorite_boards: { max: 160 },
   favorite_doors: { max: 160 },
   ansi_avatar: { max: 4096, multiline: true, ansi: true },
+  birthday: { max: 5 },
+  birthday_visible: { type: 'boolean' },
 });
 const PORCH_TYPES = new Set(['notice', 'event', 'classified', 'help_wanted', 'auto_message']);
 const MODERATION_STATES = new Set(['pending', 'active', 'rejected', 'removed']);
@@ -91,6 +93,13 @@ class CommunityService {
     }
     // Caller cards are private until the caller explicitly opts in.
     if (!this.profileForUser(userId) && !('profile_visible' in clean)) clean.profile_visible = false;
+    if ('birthday' in clean) {
+      if (clean.birthday && !/^(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/.test(clean.birthday)) {
+        throw new TypeError('Birthday must be MM-DD');
+      }
+      // Storing a birthday is the opt-in; clearing it withdraws.
+      clean.birthday_visible = Boolean(clean.birthday);
+    }
     return this._profiles().upsert(positiveInt(userId, 0), clean);
   }
 
@@ -100,6 +109,25 @@ class CommunityService {
       limit: positiveInt(query.limit, 25, 100),
       offset: Math.max(0, Number.parseInt(query.offset, 10) || 0),
     });
+  }
+
+  // Birthdays and call anniversaries for the next seven days.
+  houseCalendar(now = new Date()) {
+    const pad = (value) => String(value).padStart(2, '0');
+    const week = new Set();
+    for (let offset = 0; offset < 7; offset += 1) {
+      const day = new Date(now.getTime() + (offset * 86400000));
+      week.add(`${pad(day.getMonth() + 1)}-${pad(day.getDate())}`);
+    }
+    const rows = this._profiles().listCalendar();
+    const birthdays = [];
+    const anniversaries = [];
+    for (const row of rows) {
+      if (row.birthday_visible && row.birthday && week.has(row.birthday)) birthdays.push(row.username);
+      const firstCall = String(row.first_call_date || '').slice(5, 10);
+      if (/^\d{2}-\d{2}$/.test(firstCall) && week.has(firstCall)) anniversaries.push(row.username);
+    }
+    return { birthdays, anniversaries };
   }
 
   createPorchPost(actor, input = {}) {
