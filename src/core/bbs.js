@@ -645,6 +645,24 @@ class BBSSession {
     if (this.user && this.user.guest) {
       this.write(`${ansi.cyan}    Guest line — read only. Type NEW at logon to register.${ansi.reset}\r\n`);
     }
+    if (this.user && !this.user.guest) {
+      if (this.user.quest_done_at) {
+        this.write(`${ansi.brightYellow}    ★ First Call${ansi.reset}\r\n`);
+      } else {
+        const steps = [
+          ['quest_read', 'Read a thread'],
+          ['quest_liner', 'Leave a one-liner'],
+          ['quest_chat', 'Say hello in chat'],
+        ];
+        const done = steps.filter(([key]) => this.user[key]).length;
+        if (done > 0 || this.user.total_calls <= 1) {
+          this.write(`${ansi.brightCyan}    FIRST CALL ${done}/3${ansi.reset}\r\n`);
+          for (const [key, label] of steps) {
+            this.write(`      ${this.user[key] ? `${ansi.brightGreen}[x]` : `${ansi.cyan}[ ]`}${ansi.brightWhite} ${label}${ansi.reset}\r\n`);
+          }
+        }
+      }
+    }
     const user = db.users.findByUsername(this.user.username);
     if (user) this.user = user;
     const status = this.getMainStatus();
@@ -1003,12 +1021,25 @@ class BBSSession {
     this.writeNextPage();
   }
 
+  // ─── FIRST CALL QUEST ───────────────────────────────────
+  questStep(step) {
+    if (!this.user || this.user.guest || this.user.quest_done_at) return;
+    db.users.markQuest(this.user.id, step);
+    this.user = db.users.getById(this.user.id);
+    if (this.user.quest_read && this.user.quest_liner && this.user.quest_chat) {
+      db.users.completeQuest(this.user.id);
+      this.user = db.users.getById(this.user.id);
+      this.write(`\r\n${ansi.brightGreen}    ★ First Call complete — badge earned, one bonus door turn banked.${ansi.reset}\r\n`);
+    }
+  }
+
   showMessage(msg) {
     this.state = STATES.MESSAGE_READ;
     this.stateData.currentMessage = msg;
     const base = config.messageBases.find(item => item.id === msg.base_id);
     if (base) this.stateData.currentBase = base;
     db.messages.markRead(msg.id, this.user.id);
+    this.questStep('read');
 
     const display = {
       id: msg.id,
@@ -2099,6 +2130,7 @@ class BBSSession {
 
     // Broadcast message to all users in the same chat room
     this.broadcastChat(`${ansi.brightGreen}<${this.user.username}>${ansi.reset} ${input}`);
+    this.questStep('chat');
     this.prompt('> ');
   }
 
@@ -2173,6 +2205,7 @@ class BBSSession {
 
     const msg = input.substring(0, 38);
     db.graffiti.add(this.user.username, msg);
+    this.questStep('liner');
     this.write(`${ansi.brightGreen}    One-liner posted!${ansi.reset}\r\n`);
     this.showGraffitiWall();
   }
