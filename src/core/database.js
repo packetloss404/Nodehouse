@@ -1046,10 +1046,39 @@ const messages = {
     `).all(...ids, pattern, pattern, pattern, boundedLimit(limit), Math.max(0, Number(offset) || 0));
   },
 
+  // Scan Desk query: unread, to-me, from-user, since a date, with a per-area cap.
+  scan(baseIds, { userId = null, toUser = null, fromUser = null, since = null, unreadOnly = true, perBase = 50 } = {}) {
+    if (!Array.isArray(baseIds) || baseIds.length === 0) return [];
+    const ids = [...new Set(baseIds.map(Number).filter(Number.isInteger))];
+    if (ids.length === 0) return [];
+    const placeholders = ids.map(() => '?').join(', ');
+    const clauses = [`m.base_id IN (${placeholders})`, "m.status = 'accepted'"];
+    const params = [...ids];
+    if (toUser) { clauses.push('m.to_user = ? COLLATE NOCASE'); params.push(String(toUser)); }
+    if (fromUser) { clauses.push('m.from_user = ? COLLATE NOCASE'); params.push(String(fromUser)); }
+    if (since) { clauses.push('m.created_at >= ?'); params.push(String(since)); }
+    if (unreadOnly && userId) {
+      clauses.push('NOT EXISTS (SELECT 1 FROM message_read mr WHERE mr.user_id = ? AND mr.message_id = m.id)');
+      params.push(userId);
+    }
+    const rows = db.prepare(`
+      SELECT m.* FROM messages m WHERE ${clauses.join(' AND ')}
+      ORDER BY m.created_at ASC, m.id ASC LIMIT 2000
+    `).all(...params);
+    const counts = new Map();
+    const out = [];
+    for (const row of rows) {
+      const used = counts.get(row.base_id) || 0;
+      if (used >= perBase) continue;
+      counts.set(row.base_id, used + 1);
+      out.push(row);
+    }
+    return out;
+  },
+
   getTotal() {
     return db.prepare('SELECT COUNT(*) as count FROM messages').get().count;
   },
-
   delete(id) {
     db.prepare('DELETE FROM message_read WHERE message_id = ?').run(id);
     return db.prepare('DELETE FROM messages WHERE id = ?').run(id).changes;
