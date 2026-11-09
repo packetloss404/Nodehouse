@@ -382,6 +382,7 @@ function init() {
   ensureColumn('users', 'quest_done_at', 'TEXT');
   ensureColumn('users', 'bonus_door_turns', 'INTEGER NOT NULL DEFAULT 0');
   ensureColumn('users', 'state', "TEXT NOT NULL DEFAULT 'active'");
+  ensureColumn('users', 'time_bank_minutes', 'INTEGER NOT NULL DEFAULT 0');
 
   // Reader continuity and extension tables are deliberately additive. Existing
   // local message IDs and message_read rows remain the canonical read state.
@@ -851,6 +852,24 @@ const users = {
       SELECT id, username, real_name, created_at FROM users
       WHERE state = 'pending' ORDER BY created_at ASC, id ASC
     `).all();
+  },
+
+  addTimeBank(userId, minutes) {
+    db.prepare('UPDATE users SET time_bank_minutes = MIN(300, time_bank_minutes + ?) WHERE id = ?')
+      .run(Math.max(0, Number(minutes) || 0), userId);
+  },
+
+  spendTimeBank(userId, minutes) {
+    const cost = Math.max(0, Number(minutes) || 0);
+    return db.prepare(`
+      UPDATE users SET time_bank_minutes = time_bank_minutes - ?
+      WHERE id = ? AND time_bank_minutes >= ?
+    `).run(cost, userId, cost).changes > 0;
+  },
+
+  addBonusTurn(userId, turns = 1) {
+    db.prepare('UPDATE users SET bonus_door_turns = bonus_door_turns + ? WHERE id = ?')
+      .run(Math.max(1, Number(turns) || 1), userId);
   },
 
   getAll() {
