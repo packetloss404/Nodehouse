@@ -252,6 +252,15 @@ function init() {
       end_reason TEXT NOT NULL DEFAULT ''
     );
 
+    CREATE TABLE IF NOT EXISTS next_caller_notes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER,
+      username TEXT NOT NULL,
+      body TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      shown_at TEXT
+    );
+
     CREATE TABLE IF NOT EXISTS bulletins (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       title TEXT NOT NULL,
@@ -1496,6 +1505,25 @@ const privateMail = {
   },
 };
 
+// A single note handed from one caller to the next.
+const callerNotes = {
+  create(userId, username, body) {
+    return db.transaction(() => {
+      db.prepare('DELETE FROM next_caller_notes WHERE shown_at IS NULL').run();
+      db.prepare('INSERT INTO next_caller_notes (user_id, username, body) VALUES (?, ?, ?)')
+        .run(userId, username, body);
+    })();
+  },
+  take() {
+    return db.transaction(() => {
+      const row = db.prepare('SELECT * FROM next_caller_notes WHERE shown_at IS NULL ORDER BY id LIMIT 1').get();
+      if (!row) return null;
+      db.prepare("UPDATE next_caller_notes SET shown_at = datetime('now') WHERE id = ?").run(row.id);
+      return row;
+    })();
+  },
+};
+
 // Poll operations
 const polls = {
   getActive() {
@@ -1907,6 +1935,7 @@ module.exports = {
   motd,
   dungeon,
   doors,
+  callerNotes,
   transfers,
   offlinePackets,
   hashPassword,
