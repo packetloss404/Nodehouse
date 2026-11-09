@@ -60,6 +60,7 @@ const STATES = {
   DAILY_CALL: 'daily_call',
   READER_SETUP: 'reader_setup',
   SCAN_DESK: 'scan_desk',
+  DRAFTS: 'drafts',
   MESSAGE_SEARCH: 'message_search',
   MESSAGE_RESULTS: 'message_results',
   THREAD_LIST: 'thread_list',
@@ -163,7 +164,7 @@ class BBSSession {
       [STATES.GRAFFITI_WRITE]: 'One-liner: ', [STATES.NOTE_WRITE]: 'Note: ',
       [STATES.PRIVATE_MAIL_MENU]: 'Command: ', [STATES.PRIVATE_MAIL_INBOX]: 'Mail #: ', [STATES.POLLS_LIST]: 'Poll #: ',
       [STATES.DAILY_CALL]: 'Daily command: ', [STATES.READER_SETUP]: 'Reader command: ',
-      [STATES.SCAN_DESK]: 'Scan: ',
+      [STATES.SCAN_DESK]: 'Scan: ', [STATES.DRAFTS]: 'Draft #: ',
       [STATES.MESSAGE_SEARCH]: 'Search messages: ', [STATES.MESSAGE_RESULTS]: 'Result message #, or Q: ',
       [STATES.THREAD_LIST]: 'Thread message #, or Q: ', [STATES.FRONT_PORCH]: 'Porch command: ',
       [STATES.PROFILE_EDIT]: 'Caller card: ', [STATES.PORCH_POST]: 'Porch post: ',
@@ -349,6 +350,9 @@ class BBSSession {
         break;
       case STATES.SCAN_DESK:
         this.handleScanDesk(input);
+        break;
+      case STATES.DRAFTS:
+        this.handleDrafts(input);
         break;
       case STATES.MESSAGE_SEARCH:
         this.handleMessageSearch(input);
@@ -1031,6 +1035,11 @@ class BBSSession {
       return;
     }
 
+    if (cmd === 'D') {
+      this.showDrafts();
+      return;
+    }
+
     // Try to read a specific message number
     const msgId = parseInt(cmd);
     if (!isNaN(msgId)) {
@@ -1360,6 +1369,57 @@ class BBSSession {
 
   // ─── MESSAGE WRITING ────────────────────────────────────
 
+  // ─── DRAFT SHELF ────────────────────────────────────────
+  showDrafts() {
+    this.state = STATES.DRAFTS;
+    const drafts = this.reader.listDrafts(this.user.id);
+    this.write(ansi.clear + `${ansi.brightCyan}    NODEHOUSE // DRAFT SHELF${ansi.reset}\r\n`);
+    this.write(`${ansi.cyan}    --------------------------------------------------------${ansi.reset}\r\n`);
+    if (!drafts.length) this.write(`${ansi.brightYellow}    No drafts saved.${ansi.reset}\r\n`);
+    for (const draft of drafts) {
+      const base = config.messageBases.find((item) => item.id === draft.base_id);
+      this.write(`${ansi.brightYellow}    #${String(draft.id).padEnd(4)}${ansi.brightWhite}${String(draft.subject || '(no subject)').slice(0, 34).padEnd(35)}${ansi.cyan}${String(base ? base.name : 'mail').slice(0, 16)}${ansi.reset}\r\n`);
+    }
+    this.prompt('Draft # (R# resume, X# delete, Q back): ');
+  }
+
+  handleDrafts(input) {
+    const raw = String(input || '').trim();
+    const cmd = raw.toUpperCase();
+    if (!cmd || cmd === 'Q') { this.showMessageList(); return; }
+    const match = cmd.match(/^([RX])?\s*(\d+)$/);
+    if (!match) { this.showDrafts(); return; }
+    const id = Number(match[2]);
+
+    if (match[1] === 'X') {
+      this.reader.deleteDraft(this.user.id, id);
+      this.write(`${ansi.brightGreen}    Draft #${id} deleted.${ansi.reset}\r\n`);
+      this.showDrafts();
+      return;
+    }
+
+    const draft = this.reader.getDraft(this.user.id, id);
+    if (!draft) {
+      this.write(`${ansi.brightRed}    No draft #${id}.${ansi.reset}\r\n`);
+      this.showDrafts();
+      return;
+    }
+    const base = config.messageBases.find((item) => item.id === draft.base_id) || this.stateData.currentBase;
+    if (base) this.stateData.currentBase = base;
+    this.stateData.newMessage = {
+      to: draft.to_user || 'All',
+      subject: draft.subject || '',
+      replyTo: draft.reply_to || null,
+      prefill: null,
+    };
+    this.stateData.messageLines = String(draft.body || '').split(/\r?\n/);
+    this.stateData.resumedDraftId = draft.id;
+    this.state = STATES.MESSAGE_WRITE_BODY;
+    this.write(`${ansi.brightGreen}    Resuming draft #${draft.id}.${ansi.reset}\r\n`);
+    for (const line of this.stateData.messageLines) this.write(`${ansi.cyan}${line}${ansi.reset}\r\n`);
+    this.prompt('│ ');
+  }
+
   handleMessageWriteTo(input) {
     const nm = this.stateData.newMessage;
     nm.to = input || nm.to || 'All';
@@ -1414,6 +1474,10 @@ class BBSSession {
       });
       db.messages.markRead(messageId, this.user.id);
       db.users.incrementPosts(this.user.id);
+      if (this.stateData.resumedDraftId) {
+        this.reader.deleteDraft(this.user.id, this.stateData.resumedDraftId);
+        this.stateData.resumedDraftId = null;
+      }
 
       this.write(`\r\n${ansi.brightGreen}    Message saved!${ansi.reset}\r\n`);
       this.finishCompose(() => this.showMessageList());
@@ -1429,6 +1493,7 @@ class BBSSession {
     if (input.toUpperCase() === '/D') {
       const nm = this.stateData.newMessage;
       const saved = this.reader.saveDraft(this.user.id, {
+        ...(this.stateData.resumedDraftId ? { id: this.stateData.resumedDraftId } : {}),
         baseId: this.stateData.currentBase.id,
         toUser: nm.to,
         subject: nm.subject,
