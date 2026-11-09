@@ -10,6 +10,8 @@
   "sysopLevel": 255,
   "allowNewUsers": true,
   "allowGuests": true,
+  "requireValidation": false,
+  "validationGraceDays": 7,
   "defaultTheme": "packet",
   "idleTimeout": 300,
   "idleTimeoutPreAuth": 60,

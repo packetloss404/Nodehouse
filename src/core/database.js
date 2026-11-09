@@ -372,6 +372,7 @@ function init() {
   ensureColumn('users', 'quest_chat', 'INTEGER NOT NULL DEFAULT 0');
   ensureColumn('users', 'quest_done_at', 'TEXT');
   ensureColumn('users', 'bonus_door_turns', 'INTEGER NOT NULL DEFAULT 0');
+  ensureColumn('users', 'state', "TEXT NOT NULL DEFAULT 'active'");
 
   // Reader continuity and extension tables are deliberately additive. Existing
   // local message IDs and message_read rows remain the canonical read state.
@@ -829,6 +830,17 @@ const users = {
       SET quest_done_at = datetime('now'), bonus_door_turns = bonus_door_turns + 1
       WHERE id = ? AND quest_done_at IS NULL
     `).run(userId).changes > 0;
+  },
+
+  setState(userId, state) {
+    db.prepare('UPDATE users SET state = ? WHERE id = ?').run(String(state), userId);
+  },
+
+  listPending() {
+    return db.prepare(`
+      SELECT id, username, real_name, created_at FROM users
+      WHERE state = 'pending' ORDER BY created_at ASC, id ASC
+    `).all();
   },
 
   getAll() {
