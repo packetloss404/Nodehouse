@@ -32,7 +32,7 @@ const CALLER_B = 'E2EReaderB';
 const P = {
   conferences: 'Conference #: ',
   messageList: 'Message command: ',
-  messageRead: 'F/R/T/U/N/P/Q: ',
+  messageRead: 'F/R/T/U/N/P/C/Q: ',
   readerSetup: 'Reader command: ',
   searchPrompt: 'Search messages: ',
   searchResults: 'Result message #, or Q: ',
