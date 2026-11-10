@@ -17,9 +17,8 @@ test('a pending account reads but cannot post until validated', async () => {
     // Posting is refused.
     await client.sendAndWait('M', /Conference #:/);
     await client.sendAndWait('1', /Message command:/);
-    await client.sendAndWait('W', /To \(or "All"\): /);
     const before = client.mark();
-    await client.send('All');
+    await client.send('W');
     await client.waitFor(/awaiting validation/i, { from: before });
     client.close();
 

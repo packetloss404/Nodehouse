@@ -881,6 +881,13 @@ const users = {
     return db.prepare('SELECT id, username, real_name, location, access_level, total_calls, total_posts, last_call_date, first_call_date FROM users ORDER BY username').all();
   },
 
+  countActiveAtLevel(minimumLevel) {
+    return db.prepare(`
+      SELECT COUNT(*) AS count FROM users
+      WHERE state = 'active' AND guest = 0 AND access_level >= ?
+    `).get(minimumLevel).count;
+  },
+
   getById(id) {
     return db.prepare('SELECT * FROM users WHERE id = ?').get(id);
   },
@@ -1136,6 +1143,15 @@ const readerSubscriptions = {
       SELECT * FROM reader_subscriptions WHERE user_id = ?
       ORDER BY sort_order, base_id
     `).all(userId);
+  },
+
+  listWithDefaults(userId, baseIds) {
+    const saved = new Map(this.list(userId).map(row => [row.base_id, row]));
+    return [...new Set(baseIds)].map(baseId => saved.get(baseId) || {
+      base_id: baseId,
+      subscribed: 1,
+      sort_order: defaultSortOrder(baseId),
+    }).sort((a, b) => a.sort_order - b.sort_order || a.base_id - b.base_id);
   },
 
   set(userId, baseId, subscribed, sortOrder = null) {

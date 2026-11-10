@@ -4,6 +4,7 @@ const db = require('../core/database');
 const { createExpressRateLimit } = require('../server/guardrails');
 const { CommunityService, cleanText } = require('../core/community-service');
 const { ACCESS, safeActor, requirePermission } = require('./authz');
+const { canWrite } = require('../core/caller-access');
 
 const ADMIN_SESSION_TTL_MS = 12 * 60 * 60 * 1000;
 const MIN_ADMIN_PASSWORD_LENGTH = 12;
@@ -19,6 +20,11 @@ function setupAdminPanel(app, nodeManager, config, services = {}) {
     message: 'Too many admin login attempts. Please try again later.',
   });
 
+  function isLastActiveSysOp(user) {
+    return canWrite(user) && user.access_level >= ACCESS.SYSOP &&
+      db.users.countActiveAtLevel(ACCESS.SYSOP) <= 1;
+  }
+
   app.use('/admin/api', express.json({ limit: '16kb' }));
 
   function generateToken() {
@@ -30,7 +36,7 @@ function setupAdminPanel(app, nodeManager, config, services = {}) {
     const session = ADMIN_SESSIONS.get(token);
     if (session && session.expiresAt > Date.now()) {
       const current = db.users.getById(session.actor.id);
-      if (!current || current.access_level < ACCESS.MODERATOR) {
+      if (!canWrite(current) || current.access_level < ACCESS.MODERATOR) {
         ADMIN_SESSIONS.delete(token);
         res.status(401).json({ error: 'Unauthorized' });
         return;
@@ -57,7 +63,7 @@ function setupAdminPanel(app, nodeManager, config, services = {}) {
       return res.status(400).json({ error: 'Username and password are required' });
     }
     const user = db.users.authenticate(username, password);
-    if (user && user.access_level >= ACCESS.MODERATOR) {
+    if (canWrite(user) && user.access_level >= ACCESS.MODERATOR) {
       const token = generateToken();
       const actor = safeActor(user);
       ADMIN_SESSIONS.set(token, { expiresAt: Date.now() + ADMIN_SESSION_TTL_MS, actor });
@@ -111,7 +117,11 @@ function setupAdminPanel(app, nodeManager, config, services = {}) {
 
   app.post('/admin/api/users/:id/reject', requireAuth, requirePermission('MANAGE_USERS'), (req, res) => {
     const id = parseInt(req.params.id);
-    if (!db.users.getById(id)) return res.status(404).json({ error: 'User not found' });
+    const target = db.users.getById(id);
+    if (!target) return res.status(404).json({ error: 'User not found' });
+    if (isLastActiveSysOp(target)) {
+      return res.status(409).json({ error: 'The last active SysOp account cannot be rejected' });
+    }
     db.users.setState(id, 'rejected');
     community.recordAudit(req.adminActor, 'user.reject', 'user', req.params.id);
     res.json({ ok: true });
@@ -133,8 +143,7 @@ function setupAdminPanel(app, nodeManager, config, services = {}) {
     if (!Number.isInteger(requestedAccess) || requestedAccess < ACCESS.CALLER || requestedAccess > 255) {
       return res.status(400).json({ error: 'Access level must be an integer from 10 to 255' });
     }
-    const sysops = db.users.getAll().filter(user => user.access_level >= ACCESS.SYSOP);
-    if (target.access_level >= ACCESS.SYSOP && requestedAccess < ACCESS.SYSOP && sysops.length <= 1) {
+    if (requestedAccess < ACCESS.SYSOP && isLastActiveSysOp(target)) {
       return res.status(409).json({ error: 'The last SysOp account cannot be demoted' });
     }
     db.users.update(targetId, req.body);
@@ -148,8 +157,7 @@ function setupAdminPanel(app, nodeManager, config, services = {}) {
     if (targetId === req.adminActor.id) return res.status(400).json({ error: 'You cannot delete your own active account' });
     const target = db.users.getById(targetId);
     if (!target) return res.status(404).json({ error: 'User not found' });
-    const sysops = db.users.getAll().filter(user => user.access_level >= ACCESS.SYSOP);
-    if (target.access_level >= ACCESS.SYSOP && sysops.length <= 1) {
+    if (isLastActiveSysOp(target)) {
       return res.status(409).json({ error: 'The last SysOp account cannot be deleted' });
     }
     community.recordAudit(req.adminActor, 'user.delete', 'user', req.params.id);

@@ -98,7 +98,7 @@ test('PacketService issues hashed one-shot transfers and validates imports befor
       markRead: (...args) => readMarks.push(args),
     },
     privateMail: { getInbox: () => [] }, bulletins: { getActive: () => [] },
-    users: { getById: () => ({ id: 2, username: 'Caller', access_level: 10 }), incrementPosts() {} },
+    users: { getById: () => ({ id: 2, username: 'Caller', access_level: 10, state: 'active' }), incrementPosts() {} },
     transfers: {
       create(userId, purpose, tokenHashValue, filename, mimeType, size, expiresAt) {
         const row = { id: nextTransfer++, user_id: userId, purpose, token_hash: tokenHashValue, filename, mime_type: mimeType, size, expires_at: expiresAt };

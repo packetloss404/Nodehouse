@@ -5,7 +5,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { startBoard, register, adminLogin, adminFetch } = require('../helpers/board');
+const { startBoard, register, login, adminLogin, adminFetch } = require('../helpers/board');
 
 test('an upload is quarantined, approved, then downloadable exactly once', async () => {
   const board = await startBoard();
@@ -39,6 +39,17 @@ test('an upload is quarantined, approved, then downloadable exactly once', async
     assert.equal(approved.status, 200);
     assert.equal(approved.body.state, 'published');
 
+    await client.sendAndWait('Q', /Area #: /);
+    await client.sendAndWait('2', /Command: /);
+    const wrongArea = client.mark();
+    await client.sendAndWait(`D${queued.id}`, /No file #\d+ in this library/);
+    await client.waitFor(/Command: /, { from: wrongArea });
+    assert.doesNotMatch(client.since(wrongArea), /\/transfers\/file\/download/);
+    await client.sendAndWait('Q', /Area #: /);
+    const listing = client.mark();
+    await client.sendAndWait('1', /Command: /);
+    assert.match(client.since(listing), new RegExp(`\\b${queued.id}\\s+notes\\.txt`));
+
     await client.sendAndWait(`D${queued.id}`, /Press Enter to continue/);
     const downloadPath = client.text().match(/\/transfers\/file\/download\/\d+\/[A-Za-z0-9_-]+/);
     assert.ok(downloadPath, 'the download link should be printed');
@@ -49,6 +60,18 @@ test('an upload is quarantined, approved, then downloadable exactly once', async
 
     const replay = await board.fetch(downloadPath[0]);
     assert.equal(replay.status, 404, 'a used download link must not work twice');
+
+    // Read-only callers retain downloads from a permitted, selected area.
+    const guest = await board.connectWs();
+    await login(guest, { username: 'GUEST', password: 'ignored' });
+    await guest.sendAndWait('F', /Area #: /);
+    await guest.sendAndWait('1', /Command: /);
+    const guestOutput = guest.mark();
+    await guest.sendAndWait(`D${queued.id}`, /Press Enter to continue/);
+    const guestLink = guest.since(guestOutput).match(/\/transfers\/file\/download\/\d+\/[A-Za-z0-9_-]+/);
+    assert.ok(guestLink);
+    assert.equal(await (await board.fetch(guestLink[0])).text(), 'hello file library\n');
+    guest.close();
 
     client.close();
   } finally {

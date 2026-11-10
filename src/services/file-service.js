@@ -6,6 +6,7 @@
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
+const { canWrite, canAccessFileArea } = require('../core/caller-access');
 
 const MAX_UPLOAD_BYTES = 4 * 1024 * 1024;
 const TRANSFER_TTL_MS = 30 * 60 * 1000;
@@ -20,16 +21,26 @@ function expiry() {
 }
 
 class FileService {
-  constructor({ database, root }) {
+  constructor({ database, config, root }) {
     this.db = database;
-    this.root = root;
-    this.quarantineDir = path.join(root, '.quarantine');
-    this.libraryDir = path.join(root, '.library');
+    this.config = config;
+    this.root = path.resolve(root);
+    this.quarantineDir = path.join(this.root, '.quarantine');
+    this.libraryDir = path.join(this.root, '.library');
     fs.mkdirSync(this.quarantineDir, { recursive: true });
     fs.mkdirSync(this.libraryDir, { recursive: true });
   }
 
+  hasAreaAccess(user, areaId) {
+    const area = this.config.fileAreas.find(area => area.id === areaId);
+    return canAccessFileArea(user, area, this.config);
+  }
+
   createUpload(user, { areaId, filename }) {
+    const current = this.db.users.getById(user.id);
+    if (!canWrite(current) || !this.hasAreaAccess(current, areaId)) {
+      throw new Error('Uploads require an active account with access to this area.');
+    }
     const purpose = `file-upload:${Number(areaId)}`;
     if (this.db.transfers.countActive(user.id, purpose) >= MAX_ACTIVE_TRANSFERS) {
       throw new Error('Too many active uploads. Use or let an earlier link expire.');
@@ -48,6 +59,8 @@ class FileService {
     const tokenHash = hashToken(token);
     const row = this.db.transfers.get(tokenHash, purpose);
     if (!row) return null;
+    const current = this.db.users.getById(row.user_id);
+    if (!canWrite(current) || !this.hasAreaAccess(current, areaId)) return null;
 
     const sha256 = crypto.createHash('sha256').update(content).digest('hex');
     const target = path.join(this.quarantineDir, sha256);
@@ -85,9 +98,11 @@ class FileService {
     return this.db.fileLibrary.get(fileId);
   }
 
-  createDownload(user, fileId) {
+  createDownload(user, fileId, selectedAreaId) {
     const file = this.db.fileLibrary.get(fileId);
-    if (!file || file.state !== 'published') throw new Error('File not available.');
+    const current = this.db.users.getById(user.id);
+    if (!file || file.state !== 'published' || file.area_id !== selectedAreaId ||
+        !this.hasAreaAccess(current, file.area_id)) return null;
     const purpose = `file-download:${Number(fileId)}`;
     const token = crypto.randomBytes(32).toString('base64url');
     this.db.transfers.create(user.id, purpose, hashToken(token), file.filename,
@@ -101,10 +116,11 @@ class FileService {
     const row = this.db.transfers.get(tokenHash, purpose);
     if (!row) return null;
     const file = this.db.fileLibrary.get(fileId);
-    if (!file || file.state !== 'published') return null;
+    if (!file || file.state !== 'published' ||
+        !this.hasAreaAccess(this.db.users.getById(row.user_id), file.area_id)) return null;
     const full = path.join(this.root, file.storage_key);
     if (!fs.existsSync(full)) return null;
-    this.db.transfers.consume(tokenHash, purpose);
+    if (!this.db.transfers.consume(tokenHash, purpose)) return null;
     this.db.fileLibrary.incrementDownload(fileId);
     return { path: full, filename: file.filename, mime: file.mime || 'application/octet-stream', size: file.size };
   }

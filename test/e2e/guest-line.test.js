@@ -20,9 +20,8 @@ test('a guest can read the board but cannot post', async () => {
     assert.match(client.text(), /Welcome/);
 
     // Writing is refused, and the session returns to the main menu.
-    await client.sendAndWait('W', /To \(or "All"\): /);
     const before = client.mark();
-    await client.send('All');
+    await client.send('W');
     await client.waitFor(/cannot post/i, { from: before });
     await client.waitFor(/Main command \(/, { from: before });
 

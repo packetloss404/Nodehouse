@@ -5,6 +5,7 @@ const config = require('../../config.json');
 const { createReaderService } = require('./reader-service');
 const { createMessageService } = require('./message-service');
 const { createDailyCallService } = require('./daily-call-service');
+const { canBrowse, canWrite, canAccessFileArea } = require('./caller-access');
 const { CommunityService } = require('./community-service');
 const { DoorService } = require('../services/door-service');
 const { AnsiGallery } = require('../services/ansi-gallery');
@@ -83,14 +84,45 @@ const STATES = {
   PAUSE: 'pause',
 };
 
-// States that would let a read-only guest mutate the board.
-const GUEST_READ_ONLY_STATES = new Set([
-  STATES.MESSAGE_WRITE_TO, STATES.MESSAGE_WRITE_SUBJECT, STATES.MESSAGE_WRITE_BODY,
-  STATES.PRIVATE_MAIL_WRITE_TO, STATES.PRIVATE_MAIL_WRITE_SUBJECT, STATES.PRIVATE_MAIL_WRITE_BODY,
-  STATES.GRAFFITI_WRITE, STATES.PORCH_POST, STATES.PROFILE_EDIT,
-  STATES.PAGE_TARGET, STATES.PAGE_MESSAGE, STATES.TELEGRAM_TO, STATES.TELEGRAM_BODY,
-  STATES.CHAT_ACTIVE, STATES.POLL_VOTE,
-]);
+// New commands and states need an explicit browse grant. Mixed menus allow
+// only their read and navigation commands, including scoped file downloads.
+const READ_ONLY_INPUT = {
+  [STATES.LOGON_SUMMARY]: true,
+  [STATES.MOTD]: true,
+  [STATES.MAIN_MENU]: /^[MEFDBTCNLORVWYUHIAKZSG?]?$/,
+  [STATES.MESSAGE_BASES]: /^(?:[QNC]|\d+)?$/,
+  [STATES.MESSAGE_LIST]: /^(?:[QNS]|\d+)?$/,
+  [STATES.MESSAGE_READ]: /^[TNPQ]?$/,
+  [STATES.MORE_PROMPT]: true,
+  [STATES.FILE_AREAS]: /^(?:Q|\d+)?$/,
+  [STATES.FILE_LIST]: /^(?:Q|D\s*\d+)?$/,
+  [STATES.DOOR_GAMES]: /^[QL]?$/,
+  [STATES.DOOR_LEADERBOARD]: true,
+  [STATES.BULLETINS]: true,
+  [STATES.WHOS_ONLINE]: true,
+  [STATES.LAST_CALLERS]: true,
+  [STATES.SYSTEM_STATS]: true,
+  [STATES.USER_SETTINGS]: /^Q?$/,
+  [STATES.CHAT_ROOMS]: /^Q?$/,
+  [STATES.GRAFFITI_WALL]: /^Q?$/,
+  [STATES.PRIVATE_MAIL_MENU]: /^[QI]?$/,
+  [STATES.PRIVATE_MAIL_INBOX]: /^(?:Q|\d+)?$/,
+  [STATES.PRIVATE_MAIL_READ]: /^Q?$/,
+  [STATES.POLLS_LIST]: /^(?:Q|\d+)?$/,
+  [STATES.POLL_VIEW]: true,
+  [STATES.POLL_VOTE]: /^Q?$/,
+  [STATES.DAILY_CALL]: /^[NEBFHQ]?$/,
+  [STATES.SCAN_DESK]: true,
+  [STATES.MESSAGE_SEARCH]: true,
+  [STATES.MESSAGE_RESULTS]: true,
+  [STATES.THREAD_LIST]: /^(?:Q|\d+)?$/,
+  [STATES.FRONT_PORCH]: /^[DQ]?$/,
+  [STATES.DIRECTORY]: true,
+  [STATES.NODE_LOBBY]: /^Q?$/,
+  [STATES.ANSI_GALLERY]: true,
+  [STATES.PACKET_MENU]: /^Q?$/,
+  [STATES.PAUSE]: true,
+};
 
 function selectQuoteLines(lines, input) {
   const text = String(input || '').trim();
@@ -284,14 +316,23 @@ class BBSSession {
 
   processInputUnchecked(input) {
     if (this.sessionEnded) return;
-    const readOnly = this.user && (this.user.guest || this.user.state === 'pending');
-    if (readOnly && GUEST_READ_ONLY_STATES.has(this.state)) {
-      const message = this.user.state === 'pending'
-        ? 'Your account is awaiting validation. You can read, but not post yet.'
-        : 'Guest accounts can read the board but cannot post. Type NEW at logon to register.';
-      this.write(`\r\n${ansi.brightYellow}    ${message}${ansi.reset}\r\n`);
-      this.showMainMenu();
-      return;
+    if (this.user) {
+      const current = db.users.getById(this.user.id);
+      if (!canBrowse(current, config) || current.access_level !== this.user.access_level ||
+          canWrite(current) !== canWrite(this.user)) {
+        this.endConnection('Account access changed. Sign in again.');
+        return;
+      }
+      this.user = current;
+      const allowed = READ_ONLY_INPUT[this.state];
+      if (!canWrite(current) && allowed !== true && !allowed?.test(input.toUpperCase())) {
+        const message = current.guest
+          ? 'Guest accounts can read the board but cannot post or change it. Type NEW at logon to register.'
+          : 'Your account is awaiting validation. You can read, but not change the board yet.';
+        this.write(`\r\n${ansi.brightYellow}    ${message}${ansi.reset}\r\n`);
+        this.showMainMenu();
+        return;
+      }
     }
     switch (this.state) {
       case STATES.LOGIN_USERNAME:
@@ -531,11 +572,11 @@ class BBSSession {
     const attempted = String(this.stateData.loginUsername || '');
     if (attempted.toUpperCase() === 'GUEST' && config.allowGuests !== false) {
       const guest = db.users.findByUsername('GUEST');
-      if (guest) { this.loginUser(guest); return; }
+      if (canBrowse(guest, config)) { this.loginUser(guest); return; }
     }
 
     const user = db.users.authenticate(this.stateData.loginUsername, input);
-    if (!user) {
+    if (!canBrowse(user, config)) {
       this.loginAttempts += 1;
       const remoteAllowed = this.security.recordLoginFailure
         ? this.security.recordLoginFailure()
@@ -660,7 +701,7 @@ class BBSSession {
     };
     this.showLogonSummary();
     this.announceBirthday();
-    this.showNextCallerNote();
+    if (canWrite(this.user)) this.showNextCallerNote();
   }
 
   showNextCallerNote() {
@@ -724,7 +765,7 @@ class BBSSession {
     if (this.user && this.user.state === 'pending') {
       this.write(`${ansi.brightYellow}    Account pending validation — read only for now.${ansi.reset}\r\n`);
     }
-    if (this.user && !this.user.guest) {
+    if (canWrite(this.user)) {
       if (this.user.quest_done_at) {
         this.write(`${ansi.brightYellow}    ★ First Call${ansi.reset}\r\n`);
       } else {
@@ -742,8 +783,6 @@ class BBSSession {
         }
       }
     }
-    const user = db.users.findByUsername(this.user.username);
-    if (user) this.user = user;
     const status = this.getMainStatus();
     const menuMode = status.menuMode;
     if (forceFull || menuMode === 'NOVICE') {
@@ -886,7 +925,9 @@ class BBSSession {
 
     if (input.toUpperCase() === 'C') {
       const bases = this.getAccessibleMessageBases();
-      const currentId = this.reader.getCurrentBase(this.user.id, bases);
+      const currentId = canWrite(this.user)
+        ? this.reader.getCurrentBase(this.user.id, bases)
+        : this.stateData.currentBase?.id ?? bases[0]?.id;
       const current = bases.find(base => Number(base.id) === Number(currentId));
       if (current) {
         this.stateData.currentBase = current;
@@ -907,7 +948,9 @@ class BBSSession {
     }
 
     this.stateData.currentBase = base;
-    this.reader.setCurrentBase(this.user.id, base.id, this.getAccessibleMessageBases());
+    if (canWrite(this.user)) {
+      this.reader.setCurrentBase(this.user.id, base.id, this.getAccessibleMessageBases());
+    }
     this.showMessageList();
   }
 
@@ -955,7 +998,7 @@ class BBSSession {
 
   startNewMessageScan() {
     const bases = this.getAccessibleMessageBases();
-    const unread = this.reader.scanUnread(this.user.id, bases);
+    const unread = this.reader.scanUnread(this.user.id, bases, { readOnly: !canWrite(this.user) });
 
     if (unread.length === 0) {
       this.write(`\r\n${ansi.brightYellow}    No new messages in your accessible conferences.${ansi.reset}\r\n`);
@@ -1160,7 +1203,7 @@ class BBSSession {
 
   // ─── FIRST CALL QUEST ───────────────────────────────────
   questStep(step) {
-    if (!this.user || this.user.guest || this.user.quest_done_at) return;
+    if (!canWrite(this.user) || this.user.quest_done_at) return;
     db.users.markQuest(this.user.id, step);
     this.user = db.users.getById(this.user.id);
     if (this.user.quest_read && this.user.quest_liner && this.user.quest_chat) {
@@ -1175,7 +1218,7 @@ class BBSSession {
     this.stateData.currentMessage = msg;
     const base = config.messageBases.find(item => item.id === msg.base_id);
     if (base) this.stateData.currentBase = base;
-    db.messages.markRead(msg.id, this.user.id);
+    if (canWrite(this.user)) db.messages.markRead(msg.id, this.user.id);
     this.questStep('read');
 
     const display = {
@@ -1639,7 +1682,7 @@ class BBSSession {
     this.state = STATES.FILE_AREAS;
     this.nodeManager.setActivity(this.nodeNum, 'File Libraries');
 
-    const areas = config.fileAreas.filter(a => a.accessLevel <= this.user.access_level);
+    const areas = config.fileAreas.filter(area => canAccessFileArea(this.user, area, config));
     const r = ansi.reset;
     const c = ansi.brightCyan;
     const y = ansi.brightYellow;
@@ -1677,7 +1720,7 @@ class BBSSession {
 
     const areaId = parseInt(input);
     const area = config.fileAreas.find(a => a.id === areaId);
-    if (!area || area.accessLevel > this.user.access_level) {
+    if (!canAccessFileArea(this.user, area, config)) {
       this.write(`${ansi.brightRed}    Invalid area!${ansi.reset}\r\n`);
       this.prompt('Area #: ');
       return;
@@ -1688,8 +1731,9 @@ class BBSSession {
   }
 
   showFileList() {
-    this.state = STATES.FILE_LIST;
     const area = this.stateData.currentFileArea;
+    if (!canAccessFileArea(this.user, area, config)) { this.showFileAreas(); return; }
+    this.state = STATES.FILE_LIST;
     const files = db.fileLibrary.publishedByArea(area.id);
 
     const r = ansi.reset;
@@ -1708,14 +1752,15 @@ class BBSSession {
     if (files.length === 0) {
       screen += `${d}    │  ${w}No files in this area yet.                           ${d}│\r\n`;
     } else {
-      screen += `${d}    │  ${y}Filename             ${w}Size     ${c}By            ${g}DLs   ${d}│\r\n`;
+      screen += `${d}    │  ${y}#     Filename             ${w}Size     ${c}By            ${g}DLs   ${d}│\r\n`;
       screen += `${d}    ├──────────────────────────────────────────────────────┤\r\n`;
       for (const file of files) {
+        const id = String(file.id).padEnd(6);
         const name = file.filename.substring(0, 20).padEnd(20);
         const size = formatSize(file.size).padStart(8);
         const by = (file.uploaded_by || '').substring(0, 13).padEnd(13);
         const dls = String(file.download_count).padStart(5);
-        screen += `${d}    │  ${y}${name} ${w}${size} ${c}${by} ${g}${dls} ${d}│\r\n`;
+        screen += `${d}    │  ${y}${id}${name} ${w}${size} ${c}${by} ${g}${dls} ${d}│\r\n`;
       }
     }
 
@@ -1744,14 +1789,13 @@ class BBSSession {
     const match = upper.match(/^D\s*(\d+)$/);
     if (match) {
       const fileId = Number(match[1]);
-      const file = db.fileLibrary.get(fileId);
-      if (!file || file.state !== 'published') {
+      const link = this.fileService.createDownload(this.user, fileId, this.stateData.currentFileArea?.id);
+      if (!link) {
         this.write(`${ansi.brightRed}    No file #${fileId} in this library.${ansi.reset}\r\n`);
         this.showFileList();
         return;
       }
-      const link = this.fileService.createDownload(this.user, fileId);
-      this.write(`\r\n${ansi.brightGreen}    Download ${file.filename}:${ansi.reset}\r\n`);
+      this.write(`\r\n${ansi.brightGreen}    Download ${link.filename}:${ansi.reset}\r\n`);
       this.write(`${ansi.brightCyan}    /transfers/file/download/${fileId}/${link.token}${ansi.reset}\r\n`);
       this.write(`${ansi.cyan}    The link works once and expires in 30 minutes.${ansi.reset}\r\n`);
       this.pauseCallback = () => this.showFileList();
@@ -2042,6 +2086,7 @@ class BBSSession {
       since: this.stateData.previousLastCall || null,
       firstCall: !this.stateData.previousLastCall,
       currentCallLogId: this.callLogId,
+      readOnly: !canWrite(this.user),
     });
     this.write(ansi.clear + `${ansi.brightCyan}    NODEHOUSE // THE DAILY CALL${ansi.reset}\r\n`);
     this.write(`${ansi.cyan}    --------------------------------------------------------${ansi.reset}\r\n`);
@@ -2726,7 +2771,7 @@ class BBSSession {
   showPrivateMailRead(mail) {
     this.state = STATES.PRIVATE_MAIL_READ;
     this.stateData.currentMail = mail;
-    db.privateMail.markRead(mail.id);
+    if (canWrite(this.user)) db.privateMail.markRead(mail.id);
 
     const r = ansi.reset;
     const c = ansi.brightCyan;
