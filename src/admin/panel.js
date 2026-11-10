@@ -12,6 +12,7 @@ function setupAdminPanel(app, nodeManager, config, services = {}) {
   const ADMIN_SESSIONS = new Map();
   const community = new CommunityService(db);
   const fileService = services.fileService || null;
+  const maintenance = services.maintenance || null;
   const loginRateLimit = createExpressRateLimit({
     max: 10,
     windowMs: 15 * 60 * 1000,
@@ -215,6 +216,30 @@ function setupAdminPanel(app, nodeManager, config, services = {}) {
   // ─── Nodes ───
   app.get('/admin/api/nodes', requireAuth, (req, res) => {
     res.json(nodeManager.getOnlineUsers());
+  });
+
+  // ─── Maintenance ───
+  app.get('/admin/api/maintenance', requireAuth, requirePermission('MANAGE_SYSTEM'), (req, res) => {
+    res.json(maintenance ? maintenance.status() : { draining: false, jobs: [] });
+  });
+
+  app.post('/admin/api/maintenance/drain', requireAuth, requirePermission('MANAGE_SYSTEM'), async (req, res) => {
+    if (!maintenance) return res.status(503).json({ error: 'Maintenance is unavailable' });
+    const result = await maintenance.beginDrain({ timeoutMs: 5000 });
+    community.recordAudit(req.adminActor, 'maintenance.drain', 'system', null, result);
+    res.json(result);
+  });
+
+  app.post('/admin/api/maintenance/open', requireAuth, requirePermission('MANAGE_SYSTEM'), (req, res) => {
+    if (!maintenance) return res.status(503).json({ error: 'Maintenance is unavailable' });
+    maintenance.endDrain();
+    community.recordAudit(req.adminActor, 'maintenance.open', 'system', null, {});
+    res.json({ draining: false });
+  });
+
+  app.post('/admin/api/maintenance/backup', requireAuth, requirePermission('MANAGE_SYSTEM'), (req, res) => {
+    if (!maintenance) return res.status(503).json({ error: 'Maintenance is unavailable' });
+    res.json(maintenance.runJob('backup'));
   });
 
   // ─── File library moderation ───

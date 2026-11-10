@@ -13,6 +13,7 @@
   "requireValidation": false,
   "validationGraceDays": 7,
   "timeBank": false,
+  "maintenanceHour": 3,
   "defaultTheme": "packet",
   "idleTimeout": 300,
   "idleTimeoutPreAuth": 60,
