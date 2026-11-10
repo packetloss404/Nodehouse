@@ -14,6 +14,10 @@ function createTelnetServer(nodeManager, config, services = {}) {
   const pendingLimiter = getPendingLimiter();
 
   const server = net.createServer((socket) => {
+    if (services.maintenance && services.maintenance.draining) {
+      socket.end('The Nodehouse is in maintenance. Please call back shortly.\r\n');
+      return;
+    }
     const connectionKey = getSocketAddress(socket);
     const connectionResult = connectionLimiter.consume(connectionKey);
     if (!connectionResult.allowed) {

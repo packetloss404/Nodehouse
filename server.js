@@ -17,7 +17,8 @@ const { createWebSocketServer } = require('./src/server/websocket');
 const { setupAdminPanel } = require('./src/admin/panel');
 const { PacketService } = require('./src/services/packet-service');
 const { FileService } = require('./src/services/file-service');
-const { setupTransferRoutes } = require('./src/server/transfers');const { resolveRuntimeConfig } = require('./src/server/runtime-config');
+const { setupTransferRoutes } = require('./src/server/transfers');
+const { Maintenance } = require('./src/server/maintenance');const { resolveRuntimeConfig } = require('./src/server/runtime-config');
 
 const runtime = resolveRuntimeConfig(config);
 
@@ -46,6 +47,8 @@ const fileService = new FileService({
   database: db,
   root: process.env.NODEHOUSE_FILES_ROOT || path.join(__dirname, 'files'),
 });
+const maintenance = new Maintenance({ config, nodeManager });
+maintenance.start();
 const packetCleanupInterval = setInterval(() => packetService.cleanup(), 5 * 60 * 1000);
 packetCleanupInterval.unref();
 const startTime = Date.now();
@@ -86,17 +89,17 @@ app.get('/', (req, res) => {
 });
 
 // Setup admin panel routes
-setupAdminPanel(app, nodeManager, config, { fileService });
+setupAdminPanel(app, nodeManager, config, { fileService, maintenance });
 setupTransferRoutes(app, packetService, fileService);
 
 // ─── HTTP server (for WebSocket upgrade + web terminal) ──
 const httpServer = http.createServer(app);
 
 // ─── WebSocket server ────────────────────────────────────
-const webSocketServer = createWebSocketServer(httpServer, nodeManager, config, { packetService, fileService });
+const webSocketServer = createWebSocketServer(httpServer, nodeManager, config, { packetService, fileService, maintenance });
 
 // ─── Telnet server ───────────────────────────────────────
-const telnetServer = createTelnetServer(nodeManager, config, { packetService, fileService });
+const telnetServer = createTelnetServer(nodeManager, config, { packetService, fileService, maintenance });
 
 // ─── Start everything ────────────────────────────────────
 telnetServer.listen(runtime.telnetPort, runtime.host, () => {
@@ -137,6 +140,7 @@ function shutdown() {
   if (shuttingDown) return;
   shuttingDown = true;
   clearInterval(packetCleanupInterval);
+  maintenance.stop();
   console.log(`\n  Shutting down ${config.bbsName}...`);
 
   for (const client of webSocketServer.clients) client.terminate();

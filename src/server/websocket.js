@@ -31,6 +31,11 @@ function createWebSocketServer(httpServer, nodeManager, config, services = {}) {
   });
 
   wss.on('connection', (ws, request) => {
+    if (services.maintenance && services.maintenance.draining) {
+      ws.send('The Nodehouse is in maintenance. Please call back shortly.\r\n');
+      ws.close();
+      return;
+    }
     const connectionKey = getSocketAddress(request.socket);
     if (!connectionLimiter.consume(connectionKey).allowed) {
       ws.close(1013, 'Too many connections');
