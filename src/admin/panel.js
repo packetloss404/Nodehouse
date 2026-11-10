@@ -8,9 +8,10 @@ const { ACCESS, safeActor, requirePermission } = require('./authz');
 const ADMIN_SESSION_TTL_MS = 12 * 60 * 60 * 1000;
 const MIN_ADMIN_PASSWORD_LENGTH = 12;
 
-function setupAdminPanel(app, nodeManager, config) {
+function setupAdminPanel(app, nodeManager, config, services = {}) {
   const ADMIN_SESSIONS = new Map();
   const community = new CommunityService(db);
+  const fileService = services.fileService || null;
   const loginRateLimit = createExpressRateLimit({
     max: 10,
     windowMs: 15 * 60 * 1000,
@@ -214,6 +215,27 @@ function setupAdminPanel(app, nodeManager, config) {
   // ─── Nodes ───
   app.get('/admin/api/nodes', requireAuth, (req, res) => {
     res.json(nodeManager.getOnlineUsers());
+  });
+
+  // ─── File library moderation ───
+  app.get('/admin/api/files/pending', requireAuth, requirePermission('MODERATE_COMMUNITY'), (req, res) => {
+    res.json(db.fileLibrary.pending());
+  });
+
+  app.post('/admin/api/files/:id/approve', requireAuth, requirePermission('MODERATE_COMMUNITY'), (req, res) => {
+    if (!fileService) return res.status(503).json({ error: 'File storage is unavailable' });
+    const file = fileService.approve(parseInt(req.params.id));
+    if (!file) return res.status(404).json({ error: 'Pending file not found' });
+    community.recordAudit(req.adminActor, 'file.approve', 'file', req.params.id, { filename: file.filename });
+    res.json(file);
+  });
+
+  app.post('/admin/api/files/:id/reject', requireAuth, requirePermission('MODERATE_COMMUNITY'), (req, res) => {
+    if (!fileService) return res.status(503).json({ error: 'File storage is unavailable' });
+    const file = fileService.reject(parseInt(req.params.id));
+    if (!file) return res.status(404).json({ error: 'Pending file not found' });
+    community.recordAudit(req.adminActor, 'file.reject', 'file', req.params.id, { filename: file.filename });
+    res.json(file);
   });
 
   // ─── Community control desk ───
