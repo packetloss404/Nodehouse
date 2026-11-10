@@ -8,14 +8,18 @@ const path = require('node:path');
 
 test('file links enforce the selected area and current caller authorization', t => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'nodehouse-file-access-'));
-  const previous = process.env.NODEHOUSE_DB_PATH;
+  const previousDbPath = process.env.NODEHOUSE_DB_PATH;
+  const previousNodeEnv = process.env.NODE_ENV;
   process.env.NODEHOUSE_DB_PATH = path.join(dir, 'nodehouse.db');
+  process.env.NODE_ENV = 'test';
   const db = require('../src/core/database');
   const { FileService } = require('../src/services/file-service');
   t.after(() => {
     db.close();
-    if (previous === undefined) delete process.env.NODEHOUSE_DB_PATH;
-    else process.env.NODEHOUSE_DB_PATH = previous;
+    if (previousDbPath === undefined) delete process.env.NODEHOUSE_DB_PATH;
+    else process.env.NODEHOUSE_DB_PATH = previousDbPath;
+    if (previousNodeEnv === undefined) delete process.env.NODE_ENV;
+    else process.env.NODE_ENV = previousNodeEnv;
     fs.rmSync(dir, { recursive: true, force: true });
   });
   db.init();
