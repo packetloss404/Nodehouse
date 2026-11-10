@@ -268,6 +268,7 @@ async function startBoardOnce(options = {}) {
       HOST: '127.0.0.1',
       NODE_ENV: 'production',
       NODEHOUSE_DB_PATH: path.join(dir, 'nodehouse.db'),
+      NODEHOUSE_FILES_ROOT: path.join(dir, 'files'),
       NODEHOUSE_SYSOP_PASSWORD: sysopPassword,
       PORT: String(webPort),
       TELNET_PORT: String(telnetPort),

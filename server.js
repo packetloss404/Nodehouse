@@ -42,7 +42,10 @@ nodeManager.setTelegramSender((fromUser, toUser, message) => {
   return db.privateMail.sendTelegram(fromUser, recipient.username, message);
 });
 const packetService = new PacketService({ database: db, config });
-const fileService = new FileService({ database: db, root: path.join(__dirname, 'files') });
+const fileService = new FileService({
+  database: db,
+  root: process.env.NODEHOUSE_FILES_ROOT || path.join(__dirname, 'files'),
+});
 const packetCleanupInterval = setInterval(() => packetService.cleanup(), 5 * 60 * 1000);
 packetCleanupInterval.unref();
 const startTime = Date.now();
