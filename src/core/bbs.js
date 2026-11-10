@@ -32,6 +32,7 @@ const STATES = {
   MORE_PROMPT: 'more_prompt',
   FILE_AREAS: 'file_areas',
   FILE_LIST: 'file_list',
+  FILE_UPLOAD_NAME: 'file_upload_name',
   DOOR_GAMES: 'door_games',
   DOOR_PLAYING: 'door_playing',
   BULLETINS: 'bulletins',
@@ -110,6 +111,7 @@ class BBSSession {
     this.doorService = new DoorService(db);
     this.gallery = new AnsiGallery();
     this.packetService = security.packetService || null;
+    this.fileService = security.fileService || null;
     this.loginAttempts = 0;
     // Idle accounting: the limit depends on whether the caller has identified.
     this.lastActivity = Date.now();
@@ -159,6 +161,7 @@ class BBSSession {
       [STATES.MESSAGE_LIST]: 'Message command: ', [STATES.MESSAGE_READ]: 'F/R/T/U/N/P/Q: ',
       [STATES.MESSAGE_WRITE_TO]: 'To: ', [STATES.MESSAGE_WRITE_SUBJECT]: 'Subject: ',
       [STATES.FILE_AREAS]: 'Area #: ', [STATES.FILE_LIST]: 'Command: ',
+      [STATES.FILE_UPLOAD_NAME]: 'Upload filename: ',
       [STATES.DOOR_GAMES]: 'Door #: ', [STATES.USER_SETTINGS]: 'Setting #: ',
       [STATES.CHAT_ROOMS]: 'Room #: ', [STATES.GRAFFITI_WALL]: 'Command: ',
       [STATES.GRAFFITI_WRITE]: 'One-liner: ', [STATES.NOTE_WRITE]: 'Note: ',
@@ -324,6 +327,9 @@ class BBSSession {
         break;
       case STATES.FILE_LIST:
         this.handleFileList(input);
+        break;
+      case STATES.FILE_UPLOAD_NAME:
+        this.handleFileUploadName(input);
         break;
       case STATES.DOOR_GAMES:
         this.handleDoorGames(input);
@@ -1638,7 +1644,7 @@ class BBSSession {
   showFileList() {
     this.state = STATES.FILE_LIST;
     const area = this.stateData.currentFileArea;
-    const files = db.files.getByArea(area.id);
+    const files = db.fileLibrary.publishedByArea(area.id);
 
     const r = ansi.reset;
     const c = ansi.brightCyan;
@@ -1668,7 +1674,7 @@ class BBSSession {
     }
 
     screen += `${d}    ├──────────────────────────────────────────────────────┤\r\n`;
-    screen += `${d}    │  ${y}[${w}Q${y}]${c} Return to File Libraries                      ${d}    │\r\n`;
+    screen += `${d}    │  ${y}[${w}U${y}]${c} Upload   [${w}D#${y}]${c} Download #   [${w}Q${y}]${c} Back                      ${d}    │\r\n`;
     screen += `${d}    └──────────────────────────────────────────────────────┘${r}\r\n`;
 
     this.write(screen);
@@ -1676,7 +1682,55 @@ class BBSSession {
   }
 
   handleFileList(input) {
-    this.showFileAreas();
+    const cmd = String(input || '').trim();
+    const upper = cmd.toUpperCase();
+    if (!upper || upper === 'Q') { this.showFileAreas(); return; }
+    if (!this.fileService) {
+      this.write(`${ansi.brightYellow}    File transfers are not available on this board.${ansi.reset}\r\n`);
+      this.showFileList();
+      return;
+    }
+    if (upper === 'U') {
+      this.state = STATES.FILE_UPLOAD_NAME;
+      this.prompt('Upload filename: ');
+      return;
+    }
+    const match = upper.match(/^D\s*(\d+)$/);
+    if (match) {
+      const fileId = Number(match[1]);
+      const file = db.fileLibrary.get(fileId);
+      if (!file || file.state !== 'published') {
+        this.write(`${ansi.brightRed}    No file #${fileId} in this library.${ansi.reset}\r\n`);
+        this.showFileList();
+        return;
+      }
+      const link = this.fileService.createDownload(this.user, fileId);
+      this.write(`\r\n${ansi.brightGreen}    Download ${file.filename}:${ansi.reset}\r\n`);
+      this.write(`${ansi.brightCyan}    /transfers/file/download/${fileId}/${link.token}${ansi.reset}\r\n`);
+      this.write(`${ansi.cyan}    The link works once and expires in 30 minutes.${ansi.reset}\r\n`);
+      this.pauseCallback = () => this.showFileList();
+      this.state = STATES.PAUSE;
+      this.write(ansi.pausePrompt);
+      return;
+    }
+    this.showFileList();
+  }
+
+  handleFileUploadName(input) {
+    const name = String(input || '').trim();
+    if (!name || !this.fileService) { this.showFileList(); return; }
+    const area = this.stateData.currentFileArea;
+    try {
+      const link = this.fileService.createUpload(this.user, { areaId: area.id, filename: name });
+      this.write(`\r\n${ansi.brightGreen}    Upload ${link.filename}:${ansi.reset}\r\n`);
+      this.write(`${ansi.brightCyan}    POST /transfers/file/upload/${area.id}/${link.token}${ansi.reset}\r\n`);
+      this.write(`${ansi.cyan}    Send the raw bytes. The file waits in quarantine until the SysOp approves it.${ansi.reset}\r\n`);
+    } catch (error) {
+      this.write(`${ansi.brightRed}    ${error.message}${ansi.reset}\r\n`);
+    }
+    this.pauseCallback = () => this.showFileList();
+    this.state = STATES.PAUSE;
+    this.write(ansi.pausePrompt);
   }
 
   // ─── DOOR GAMES ─────────────────────────────────────────

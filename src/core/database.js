@@ -603,6 +603,11 @@ function init() {
   ensureColumn('user_profiles', 'favorite_boards', "TEXT NOT NULL DEFAULT ''");
   ensureColumn('user_profiles', 'favorite_doors', "TEXT NOT NULL DEFAULT ''");
   ensureColumn('user_profiles', 'birthday_visible', 'INTEGER NOT NULL DEFAULT 0');
+  // File library: uploads wait in quarantine until an operator publishes them.
+  ensureColumn('files', 'state', "TEXT NOT NULL DEFAULT 'published'");
+  ensureColumn('files', 'sha256', 'TEXT');
+  ensureColumn('files', 'storage_key', 'TEXT');
+  ensureColumn('files', 'mime', "TEXT NOT NULL DEFAULT 'application/octet-stream'");
 
   migrateLegacySeedContent();
 
@@ -1388,6 +1393,47 @@ const auditLog = {
   },
 };
 
+// Uploads, quarantine and the published file library.
+const fileLibrary = {
+  createQuarantined({ areaId, filename, description = '', size, uploadedBy, sha256, storageKey, mime }) {
+    const result = db.prepare(`
+      INSERT INTO files (area_id, filename, description, size, uploaded_by, state, sha256, storage_key, mime)
+      VALUES (?, ?, ?, ?, ?, 'quarantined', ?, ?, ?)
+    `).run(areaId, filename, description, Math.max(0, Number(size) || 0), uploadedBy, sha256, storageKey,
+      mime || 'application/octet-stream');
+    return this.get(result.lastInsertRowid);
+  },
+
+  get(id) {
+    return db.prepare('SELECT * FROM files WHERE id = ?').get(id);
+  },
+
+  pending() {
+    return db.prepare("SELECT * FROM files WHERE state = 'quarantined' ORDER BY created_at ASC").all();
+  },
+
+  publishedByArea(areaId) {
+    return db.prepare("SELECT * FROM files WHERE area_id = ? AND state = 'published' ORDER BY created_at DESC")
+      .all(Number(areaId));
+  },
+
+  publish(id, { storageKey, sha256 }) {
+    return db.prepare(`
+      UPDATE files SET state = 'published', storage_key = ?, sha256 = ?
+      WHERE id = ? AND state = 'quarantined'
+    `).run(storageKey, sha256, id).changes > 0;
+  },
+
+  reject(id) {
+    return db.prepare("UPDATE files SET state = 'rejected' WHERE id = ? AND state = 'quarantined'")
+      .run(id).changes > 0;
+  },
+
+  incrementDownload(id) {
+    db.prepare('UPDATE files SET download_count = download_count + 1 WHERE id = ?').run(id);
+  },
+};
+
 // Bulletin operations
 const bulletins = {
   getActive() {
@@ -2011,6 +2057,7 @@ module.exports = {
   dungeon,
   doors,
   callerNotes,
+  fileLibrary,
   transfers,
   offlinePackets,
   hashPassword,
