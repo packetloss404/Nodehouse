@@ -40,8 +40,9 @@ function createReaderService(store = database) {
   };
 
   return {
-    getSubscriptions(userId, accessibleBases) {
+    getSubscriptions(userId, accessibleBases, { readOnly = false } = {}) {
       const bases = normalizeBases(accessibleBases);
+      if (readOnly) return store.readerSubscriptions.listWithDefaults(userId, bases.map(base => base.id));
       store.readerSubscriptions.ensure(userId, bases.map((base) => base.id));
       const allowed = new Set(bases.map((base) => base.id));
       return store.readerSubscriptions.list(userId).filter((row) => allowed.has(row.base_id));
@@ -77,8 +78,8 @@ function createReaderService(store = database) {
       return id;
     },
 
-    scanUnread(userId, accessibleBases, { limit = 500 } = {}) {
-      const subscriptions = this.getSubscriptions(userId, accessibleBases).filter((row) => row.subscribed);
+    scanUnread(userId, accessibleBases, { limit = 500, readOnly = false } = {}) {
+      const subscriptions = this.getSubscriptions(userId, accessibleBases, { readOnly }).filter((row) => row.subscribed);
       const cap = Math.max(1, Math.min(Number(limit) || 500, 1000));
       const messages = [];
       for (const subscription of subscriptions) {

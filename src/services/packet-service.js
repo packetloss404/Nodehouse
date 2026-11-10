@@ -4,6 +4,7 @@ const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const db = require('../core/database');
+const { canWrite } = require('../core/caller-access');
 const { exportBriefcase, importBriefcase } = require('../packets/briefcase');
 const { exportQwk, importRep } = require('../packets/qwk');
 
@@ -63,6 +64,8 @@ class PacketService {
   }
 
   createExport(user, format = 'briefcase') {
+    user = this.db.users.getById(user.id);
+    if (!canWrite(user)) throw new Error('Packet transfers require an active account.');
     const purpose = `packet-download:${format}`;
     if (this.db.transfers.countRecent?.(user.id, 'packet-download:', EXPORT_WINDOW_MINUTES) >= MAX_EXPORTS_PER_WINDOW) {
       throw new Error(`Packet generation limit reached. Try again in ${EXPORT_WINDOW_MINUTES} minutes.`);
@@ -112,6 +115,8 @@ class PacketService {
   }
 
   createImport(user, format = 'briefcase') {
+    user = this.db.users.getById(user.id);
+    if (!canWrite(user)) throw new Error('Packet transfers require an active account.');
     if (!['briefcase', 'rep'].includes(format)) throw new Error('Unsupported packet import format.');
     const purpose = `packet-upload:${format}`;
     if (this.db.transfers.countActive?.(user.id, purpose) >= MAX_ACTIVE_TRANSFERS) {
@@ -129,7 +134,7 @@ class PacketService {
     const tokenHash = hashToken(String(token));
     const purpose = `packet-download:${format}`;
     const candidate = this.db.transfers.get(tokenHash, purpose);
-    if (!candidate) return null;
+    if (!candidate || !canWrite(this.db.users.getById(candidate.user_id))) return null;
     const filename = this.transferPath(candidate.id);
     const content = fs.readFileSync(filename);
     if (content.length !== candidate.size) throw new Error('Packet transfer is corrupt.');
@@ -141,7 +146,7 @@ class PacketService {
     const complete = () => {
       if (completed) return;
       completed = true;
-      if (packet) {
+      if (packet && canWrite(this.db.users.getById(transfer.user_id))) {
         for (const messageId of packet.metadata?.messageIds || []) this.db.messages.markRead(messageId, transfer.user_id);
         this.db.offlinePackets.markConsumed(packet.id, transfer.user_id);
       }
@@ -156,7 +161,7 @@ class PacketService {
     const candidate = this.db.transfers.get(tokenHash, purpose);
     if (!candidate) return null;
     const user = this.db.users.getById(candidate.user_id);
-    if (!user) throw new Error('Packet owner no longer exists.');
+    if (!canWrite(user)) return null;
     const bases = this.accessibleBases(user);
     const byNumber = new Map(bases.map(base => [Number(base.id), Number(base.id)]));
     const contentHash = crypto.createHash('sha256').update(content).digest('hex');

@@ -45,6 +45,7 @@ nodeManager.setTelegramSender((fromUser, toUser, message) => {
 const packetService = new PacketService({ database: db, config });
 const fileService = new FileService({
   database: db,
+  config,
   root: process.env.NODEHOUSE_FILES_ROOT || path.join(__dirname, 'files'),
 });
 const maintenance = new Maintenance({ config, nodeManager });
