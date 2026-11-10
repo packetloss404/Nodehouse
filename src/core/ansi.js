@@ -223,29 +223,33 @@ ansi.art.mainMenu = (status = {}) => {
   const w = ansi.brightWhite;
   const g = ansi.brightGreen;
   const d = ansi.cyan;
+  const now = new Date();
+  const clock = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+  const bar = '─'.repeat(74);
+  const row = (content) => framedRow(d, content, 74);
 
   const rows = [
-    framedRow(d, `  ${c}NODEHOUSE // NODE ${w}${String(status.nodeNum || 0).substring(0, 3).padEnd(3)}${d}                ${w}MAIN MENU`),
-    `${d}    ├──────────────────────────────────────────────────────┤`,
-    framedRow(d, `  ${g}Caller:${w} ${String(status.username || '').substring(0, 16).padEnd(16)} ${g}Call:${w} ${String(status.callCount || 0)}`),
-    framedRow(d, `  ${g}Mail:${w} ${String(status.unreadMail || 0)}   ${g}New:${w} ${String(status.unreadMessages || 0)}   ${g}Mode:${w} ${String(status.menuMode || 'NOVICE').substring(0, 8)}`),
-    `${d}    ├──────────────────────────────────────────────────────┤`,
-    framedRow(d, `  ${y}[${w}M${y}]${c} Message Conferences  ${y}[${w}E${y}]${c} Electronic Mail`),
-    framedRow(d, `  ${y}[${w}F${y}]${c} File Libraries       ${y}[${w}D${y}]${c} Door Games`),
-    framedRow(d, `  ${y}[${w}B${y}]${c} Bulletins            ${y}[${w}T${y}]${c} TeleChat`),
-    framedRow(d, `  ${y}[${w}N${y}]${c} New Message Scan     ${y}[${w}L${y}]${c} Last Callers`),
-    framedRow(d, `  ${y}[${w}W${y}]${c} Who's Online         ${y}[${w}V${y}]${c} Voting Booth`),
-    framedRow(d, `  ${y}[${w}O${y}]${c} One-Liners           ${y}[${w}Y${y}]${c} Your Settings`),
-    framedRow(d, `  ${y}[${w}P${y}]${c} Page SysOp           ${y}[${w}S${y}]${c} System Information`),
-    framedRow(d, `  ${y}[${w}H${y}]${c} Front Porch          ${y}[${w}I${y}]${c} Node Lobby`),
-    framedRow(d, `  ${y}[${w}A${y}]${c} ANSI Art Gallery     ${y}[${w}K${y}]${c} Packet Briefcase`),
-    framedRow(d, `  ${y}[${w}Z${y}]${c} Daily Call           ${y}[${w}X${y}]${c} Menu Mode`),
-    framedRow(d, `  ${y}[${w}G${y}]${c} Goodbye / Logoff`),
+    row(`  ${c}NODEHOUSE // NODE ${w}${String(status.nodeNum || 0).substring(0, 3).padEnd(3)}${d}                            ${w}MAIN MENU`),
+    `${d}    ├${bar}┤`,
+    row(`  ${g}Caller:${w} ${String(status.username || '').substring(0, 16).padEnd(16)} ${g}Call:${w} ${String(status.callCount || 0).padEnd(6)} ${g}Node:${w} ${String(status.nodeNum || 0).padEnd(4)} ${g}Mode:${w} ${String(status.menuMode || 'NOVICE').substring(0, 8)}`),
+    row(`  ${g}Mail:${w} ${String(status.unreadMail || 0).padEnd(5)} ${g}New:${w} ${String(status.unreadMessages || 0).padEnd(5)} ${g}Time:${w} ${clock}   ${d}? redisplays this menu`),
+    `${d}    ├${bar}┤`,
+    row(`  ${y}[${w}M${y}]${c} Message Conferences  ${y}[${w}E${y}]${c} Electronic Mail`),
+    row(`  ${y}[${w}F${y}]${c} File Libraries       ${y}[${w}D${y}]${c} Door Games`),
+    row(`  ${y}[${w}B${y}]${c} Bulletins            ${y}[${w}T${y}]${c} TeleChat`),
+    row(`  ${y}[${w}N${y}]${c} New Message Scan     ${y}[${w}L${y}]${c} Last Callers`),
+    row(`  ${y}[${w}W${y}]${c} Who's Online         ${y}[${w}V${y}]${c} Voting Booth`),
+    row(`  ${y}[${w}O${y}]${c} One-Liners           ${y}[${w}Y${y}]${c} Your Settings`),
+    row(`  ${y}[${w}P${y}]${c} Page SysOp           ${y}[${w}S${y}]${c} System Information`),
+    row(`  ${y}[${w}H${y}]${c} Front Porch          ${y}[${w}I${y}]${c} Node Lobby`),
+    row(`  ${y}[${w}A${y}]${c} ANSI Art Gallery     ${y}[${w}K${y}]${c} Packet Briefcase`),
+    row(`  ${y}[${w}Z${y}]${c} Daily Call           ${y}[${w}X${y}]${c} Menu Mode`),
+    row(`  ${y}[${w}G${y}]${c} Goodbye / Logoff`),
   ];
 
-  return ansi.clear + `${d}    ┌──────────────────────────────────────────────────────┐\r\n` +
+  return ansi.clear + `${d}    ┌${bar}┐\r\n` +
     `${rows.join('\r\n')}\r\n` +
-    `${d}    └──────────────────────────────────────────────────────┘\r\n${r}\r\n`;
+    `${d}    └${bar}┘\r\n${r}\r\n`;
 };
 
 ansi.art.mainPrompt = (status = {}, terse = false) => {
