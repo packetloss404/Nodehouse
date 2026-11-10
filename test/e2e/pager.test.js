@@ -43,7 +43,7 @@ test('a long message pages, and N prints the rest', async () => {
 
     const beforeNonstop = client.mark();
     await client.send('N');
-    await client.waitFor(/F\/R\/T\/U\/N\/P\/Q: /, { from: beforeNonstop });
+    await client.waitFor(/F\/R\/T\/U\/N\/P\/C\/Q: /, { from: beforeNonstop });
     assert.match(client.since(beforeNonstop), /Line 80/);
 
     client.close();
@@ -65,7 +65,7 @@ test('EXPERT mode does not page', async () => {
 
     const from = client.mark();
     await client.send(String(id));
-    await client.waitFor(/F\/R\/T\/U\/N\/P\/Q: /, { from });
+    await client.waitFor(/F\/R\/T\/U\/N\/P\/C\/Q: /, { from });
     const screen = client.since(from);
     assert.doesNotMatch(screen, /\[N\]onstop/);
     assert.match(screen, /Line 80/);

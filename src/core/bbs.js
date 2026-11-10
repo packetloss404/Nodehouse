@@ -26,6 +26,7 @@ const STATES = {
   MESSAGE_BASES: 'message_bases',
   MESSAGE_LIST: 'message_list',
   MESSAGE_READ: 'message_read',
+  QUOTE_PICK: 'quote_pick',
   MESSAGE_WRITE_TO: 'message_write_to',
   MESSAGE_WRITE_SUBJECT: 'message_write_subject',
   MESSAGE_WRITE_BODY: 'message_write_body',
@@ -90,6 +91,22 @@ const GUEST_READ_ONLY_STATES = new Set([
   STATES.PAGE_TARGET, STATES.PAGE_MESSAGE, STATES.TELEGRAM_TO, STATES.TELEGRAM_BODY,
   STATES.CHAT_ACTIVE, STATES.POLL_VOTE,
 ]);
+
+function selectQuoteLines(lines, input) {
+  const text = String(input || '').trim();
+  if (!text) return lines.slice(0, 40);
+  const picked = [];
+  for (const part of text.split(',')) {
+    const range = part.trim().match(/^(\d+)(?:\s*-\s*(\d+))?$/);
+    if (!range) continue;
+    const start = Math.max(1, Number(range[1]));
+    const end = Math.min(lines.length, Number(range[2] || range[1]));
+    for (let index = start; index <= end; index += 1) {
+      if (lines[index - 1] !== undefined) picked.push(lines[index - 1]);
+    }
+  }
+  return picked.slice(0, 40);
+}
 
 class BBSSession {
   constructor(transport, nodeNum, nodeManager, security = {}) {
@@ -158,7 +175,7 @@ class BBSSession {
       [STATES.MESSAGE_WRITE_BODY]: '│ ', [STATES.NODE_LOBBY]: 'Node command: ',
       [STATES.MORE_PROMPT]: 'More: ',
       [STATES.MAIN_MENU]: 'Main> ', [STATES.MESSAGE_BASES]: 'Conference #: ',
-      [STATES.MESSAGE_LIST]: 'Message command: ', [STATES.MESSAGE_READ]: 'F/R/T/U/N/P/Q: ',
+      [STATES.MESSAGE_LIST]: 'Message command: ', [STATES.MESSAGE_READ]: 'F/R/T/U/N/P/C/Q: ',
       [STATES.MESSAGE_WRITE_TO]: 'To: ', [STATES.MESSAGE_WRITE_SUBJECT]: 'Subject: ',
       [STATES.FILE_AREAS]: 'Area #: ', [STATES.FILE_LIST]: 'Command: ',
       [STATES.FILE_UPLOAD_NAME]: 'Upload filename: ',
@@ -309,6 +326,9 @@ class BBSSession {
         break;
       case STATES.MESSAGE_READ:
         this.handleMessageRead(input);
+        break;
+      case STATES.QUOTE_PICK:
+        this.handleQuotePick(input);
         break;
       case STATES.MESSAGE_WRITE_TO:
         this.handleMessageWriteTo(input);
@@ -1170,8 +1190,27 @@ class BBSSession {
 
     this.pageOutput(ansi.art.messageRead(display), () => {
       this.state = STATES.MESSAGE_READ;
-      this.prompt('F/R/T/U/N/P/Q: ');
+      this.prompt('F/R/T/U/N/P/C/Q: ');
     });
+  }
+
+  handleQuotePick(input) {
+    const msg = this.stateData.quoteSource;
+    if (!msg) { this.showMessageList(); return; }
+    const source = String(msg.body || '').replace(/\r\n/g, '\n').split('\n')
+      .filter((line) => !/^(--- |\* Origin:|\s*--\s*$)/.test(line));
+    const picked = selectQuoteLines(source, input);
+    const initial = (String(msg.from_user || '?').match(/[A-Za-z0-9]/) || ['?'])[0].toUpperCase();
+    const quoted = picked.map((line) => `${initial}> ${line}`.slice(0, 76)).join('\n');
+    this.state = STATES.MESSAGE_WRITE_SUBJECT;
+    this.stateData.newMessage = {
+      replyTo: msg.id,
+      subject: 'Re: ' + String(msg.subject || '').replace(/^Re: /i, ''),
+      to: 'All',
+      prefill: quoted,
+    };
+    this.write(`\r\n${ansi.brightGreen}    Quoting ${picked.length} line(s)${ansi.reset}\r\n`);
+    this.prompt(`Subject [${this.stateData.newMessage.subject}]: `);
   }
 
   rememberMessageReturn() {
@@ -1217,6 +1256,13 @@ class BBSSession {
         };
         this.write(`\r\n${ansi.brightGreen}    Public follow-up in ${this.stateData.currentBase.name}${ansi.reset}\r\n`);
         this.prompt(`Subject [${this.stateData.newMessage.subject}]: `);
+        break;
+      case 'C':
+        this.rememberMessageReturn();
+        this.state = STATES.QUOTE_PICK;
+        this.stateData.quoteSource = this.stateData.currentMessage;
+        this.write(`\r\n${ansi.brightCyan}    Quote lines from #${this.stateData.currentMessage.id} (e.g. 3-9,12; Enter for all)${ansi.reset}\r\n`);
+        this.prompt('Quote lines: ');
         break;
       case 'R':
         this.rememberMessageReturn();

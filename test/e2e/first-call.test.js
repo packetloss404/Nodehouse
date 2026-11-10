@@ -20,7 +20,7 @@ test('a first call completes three steps and earns the badge', async () => {
     // Step 1 — read a thread.
     await client.sendAndWait('M', /Conference #:/);
     await client.sendAndWait('1', /Message command:/);
-    await client.sendAndWait('1', /F\/R\/T\/U\/N\/P\/Q: /);
+    await client.sendAndWait('1', /F\/R\/T\/U\/N\/P\/C\/Q: /);
     await client.sendAndWait('Q', /Message command:/);
     await client.sendAndWait('Q', /Conference #:/);
     await client.sendAndWait('Q', /Main command \(/);
